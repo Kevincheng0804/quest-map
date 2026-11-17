@@ -804,6 +804,19 @@ test('Cowork：quest_plan 把整份清單變成關卡，任務是獨立的對話
   assert.equal(p.sessions[0].name, 'Cowork・建立打招呼檔案');
 });
 
+test('Cowork：說明卡的技術細節寫 Cowork，不寫 Claude Code', () => {
+  const hub = createHub();
+  hub.chatPlan(cp([['甲', D]]));
+  assert.equal(hub.plan().levels[0].tech, 'Cowork 進度清單：甲');
+  const solo = createHub();
+  solo.describe({ chat: true, levels: [] });
+  assert.equal(solo.plan().levels[0].tech, 'Cowork 任務還沒有步驟清單');
+  const code = createHub();
+  code.handle(ev('A', '/w/alpha', prompt('a')));
+  code.handle(ev('A', '/w/alpha', todos(['乙', D])));
+  assert.equal(code.plan().levels[0].tech, 'Claude Code 待辦：乙');
+});
+
 test('Cowork：進度有變動就再送一次整份，狀態、新增、拆除都跟著變', () => {
   const hub = createHub();
   hub.chatPlan(cp([['列出步驟', C], ['建立 hello.txt', D], ['確認內容', P]]));

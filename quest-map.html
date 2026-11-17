@@ -617,7 +617,7 @@ function renderSessions(p) {
   if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
   const af = document.activeElement, focusId = af && af.classList && af.classList.contains('srow') ? af.dataset.id : null;
   box.hidden = false;
-  box.innerHTML = `<div class="eyebrow">Claude Code 對話（${list.length}）</div><div class="slist">${list.map(x => {
+  box.innerHTML = `<div class="eyebrow">對話（${list.length}）</div><div class="slist">${list.map(x => {
     const icon = x.waiting ? ICON.wait : (x.total && x.done === x.total) ? ICON.done : x.mood === 'work' ? ICON.doing : ICON.todo;
     const pct = x.total ? Math.round(x.done / x.total * 100) : 0;
     return `<button type="button" class="srow${x.id === p.selected ? ' sel' : ''}${x.waiting ? ' w' : ''}" data-id="${esc(x.id)}" aria-pressed="${x.id === p.selected}" aria-label="${esc(x.name)}，${x.waiting ? '在等你' : `已通關 ${x.done} / ${x.total}`}，點一下切換">

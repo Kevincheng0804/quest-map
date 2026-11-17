@@ -179,7 +179,7 @@ function createSession() {
       if (!o && oldActive.length === list.length && oldActive[i] && !newTitles.has(oldActive[i].title) && alike(oldActive[i].title, title)) o = oldActive[i];
       if (o) used.add(o.id);
       const status = nextStatus(o, t.status);
-      const lv = { id: o ? o.id : 't' + (++S.seq), title, status, plain: t.description || t.activeForm || title, tech: `Claude Code 待辦：${title}` };
+      const lv = { id: o ? o.id : 't' + (++S.seq), title, status, plain: t.description || t.activeForm || title, tech: `${S.chat ? 'Cowork 進度清單' : 'Claude Code 待辦'}：${title}` };
       if (o && o.isNew) lv.isNew = true;
       if (o && o.reason && status !== 'done') lv.reason = o.reason;
       if (!o && hadPlan) { lv.isNew = true; lv.reason = `新關卡：${quote()}`; added++; }
@@ -368,7 +368,7 @@ function createSession() {
     const levels = S.levels.length ? S.levels.map(({ keepReason, ...l }) => disp(l)) : [disp({
       id: 'solo' + S.round, title: S.prompted ? '處理你的要求' : '等你出發', status: S.solo,
       plain: S.prompted ? 'Claude 這次沒有列出步驟清單，整件事算成一關。' : '到 Claude Code 輸入指令，地圖就會開始動。',
-      tech: 'Claude Code 尚未建立待辦清單',
+      tech: S.chat ? 'Cowork 任務還沒有步驟清單' : 'Claude Code 尚未建立待辦清單',
       ...(S.solo === 'wait' ? { reason: '等你開門：這一步要你本人同意或回答' } : {})
     })];
     const complete = S.levels.length ? allDone() : S.solo === 'done';
