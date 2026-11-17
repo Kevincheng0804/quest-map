@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>AI 任務闖關地圖</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：固定 1440×900 的舞台（海上三座島：走過的、現在的、被霧蓋住的終點），整體等比縮放塞進視窗 */
+:root {
+  color-scheme: light;
+  --sea: #cfe6ec;
+  --page: #b9d6de;
+  --ink: #1b2530;
+  --ink-soft: #4a5562;
+  --panel: #ffffff;
+  --line: #c9d2da;
+  --todo-edge: #8f99a5;
+  --doing: #1f6feb;
+  --wait: #c2540a;
+  --wait-bg: #fff0e0;
+  --done: #1a7f45;
+  --adjust: #f2c230;
+  --adjust-ink: #3b2f00;
+  --adjust-bg: #fff7d6;
+  --cancel: #7d8590;
+  --road: #ecdcb4;
+  --road-edge: #c9b584;
+  --robot: #6b4ee6;
+  --font: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --move: .8s cubic-bezier(.65, 0, .35, 1);
+}
+html, body { height: 100%; }
+body {
+  background: var(--page); color: var(--ink); font-family: var(--font);
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-sizing: border-box; display: flex; align-items: center; justify-content: center; overflow-x: hidden;
+}
+.fit { position: relative; flex: none; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 40px rgba(20, 50, 70, .25); }
+.stage { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; background: var(--sea); overflow: hidden; font-size: 15px; line-height: 1.5; }
+.stage * { box-sizing: border-box; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 3px solid #111; outline-offset: 3px; }
+svg.map { position: absolute; inset: 0; z-index: 1; }
+
+/* 示範切換列 */
+.demo { position: absolute; z-index: 30; top: 0; left: 0; right: 0; height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 24px; background: rgba(255, 255, 255, .92); border-bottom: 1px solid var(--line); }
+.demo-title { font-weight: 700; margin-right: auto; display: flex; gap: 10px; align-items: baseline; }
+.demo-title small { font-weight: 400; color: var(--ink-soft); font-size: 13px; }
+.demo-label { font-size: 13px; color: var(--ink-soft); margin-right: 4px; }
+.demo button { min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px solid var(--todo-edge); background: #fff; font-weight: 600; font-size: 14px; }
+.demo button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* 固定資訊面板 */
+.hud { position: absolute; z-index: 9; background: var(--panel); border-radius: 14px; box-shadow: 0 4px 16px rgba(20, 50, 70, .16); padding: 14px 18px; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--ink-soft); }
+#where { left: 24px; top: 78px; width: 310px; }
+#where h1 { margin: 2px 0 0; font-size: 20px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#where .goal { color: var(--ink-soft); font-size: 13px; }
+.bar { height: 12px; border-radius: 6px; background: #e3e8ec; margin: 10px 0 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--done); border-radius: 6px; transition: width var(--move); }
+.count { display: flex; justify-content: space-between; font-size: 14px; font-variant-numeric: tabular-nums; }
+.count b { font-weight: 800; }
+#sessions { left: 24px; top: 250px; width: 310px; padding: 12px 12px 10px; }
+#sessions .eyebrow { margin: 0 6px 6px; }
+.slist { display: grid; gap: 4px; max-height: 232px; overflow-y: auto; }
+.srow { display: grid; grid-template-columns: 20px minmax(0, 1fr) 54px 44px; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; }
+.srow:hover { background: #eef2f6; }
+.srow.sel { background: #e8f0ff; box-shadow: inset 0 0 0 2px var(--doing); }
+.srow.w { background: var(--wait-bg); box-shadow: inset 0 0 0 2px var(--wait); }
+.srow .sic { display: grid; place-items: center; color: var(--ink-soft); }
+.srow .sic svg { width: 18px; height: 18px; }
+.srow.w .sic { color: var(--wait); }
+.srow .snm { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .sbar { height: 8px; border-radius: 4px; background: #e3e8ec; overflow: hidden; }
+.srow .sbar i { display: block; height: 100%; background: var(--done); border-radius: 4px; }
+.srow .scnt { font-size: 13px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.srow.w .scnt { color: var(--wait); }
+#said { left: 24px; bottom: 24px; width: 390px; }
+#said p { margin: 4px 0 0; font-size: 16px; font-weight: 500; }
+#card { right: 24px; bottom: 24px; width: 376px; min-height: 250px; display: flex; flex-direction: column; gap: 8px; }
+#card h2 { margin: 0; font-size: 20px; font-weight: 800; }
+#card p { margin: 0; }
+.card-top { display: flex; align-items: center; justify-content: space-between; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 8px; border-radius: 14px; font-size: 13px; font-weight: 700; color: #fff; }
+.pill svg { width: 16px; height: 16px; }
+.pill.todo { background: #fff; color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--todo-edge); }
+.pill.doing { background: var(--doing); }
+.pill.wait { background: var(--wait); }
+.pill.done { background: var(--done); }
+.pill.adjust { background: var(--adjust); color: var(--adjust-ink); }
+.pill.cancel { background: #5d6570; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 14px; }
+.steps li { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-soft); }
+.steps li svg { width: 16px; height: 16px; flex: none; margin-top: 3px; }
+.steps li.ok { color: var(--ink); }
+.steps li.ok svg { color: var(--done); }
+.now { display: flex; gap: 8px; align-items: center; color: var(--doing); font-weight: 700; font-size: 14px; }
+.now svg { width: 14px; height: 14px; flex: none; }
+.tlabel { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--ink-soft); margin-top: 2px; }
+.steps li.ch { color: var(--ink); }
+.steps li.ch svg { color: var(--ink-soft); }
+.why { border-radius: 10px; padding: 8px 12px; background: #eaf2ff; font-size: 14px; }
+.why.wait { background: var(--wait-bg); }
+.why b { display: block; font-size: 12px; letter-spacing: .06em; color: var(--ink-soft); }
+.tech { margin-top: auto !important; font-family: var(--mono); font-size: 12.5px; background: #eef0f2; color: #3d4753; border-radius: 8px; padding: 7px 10px; overflow-wrap: anywhere; }
+.tech span { font-family: var(--font); font-weight: 700; margin-right: 8px; }
+
+/* 更新通知 */
+#toast { position: absolute; z-index: 25; top: 78px; left: 50%; transform: translate(-50%, -30px); opacity: 0; pointer-events: none; background: var(--doing); color: #fff; font-weight: 700; font-size: 16px; padding: 10px 22px; border-radius: 24px; box-shadow: 0 6px 18px rgba(31, 111, 235, .4); transition: transform .35s, opacity .35s; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
+#toast.show { transform: translate(-50%, 0); opacity: 1; }
+#toast svg { width: 18px; height: 18px; }
+
+/* 已通過的世界 */
+.world { position: absolute; z-index: 4; left: 0; top: 0; width: 150px; margin: -42px 0 0 -75px; padding: 4px 0; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.world .disc { width: 76px; height: 76px; border-radius: 50%; background: var(--done); border: 4px solid #fff; box-shadow: 0 4px 0 #0f5c30; display: grid; place-items: center; color: #fff; }
+.world .disc svg { width: 34px; height: 34px; }
+.world .name { background: #fff; border-radius: 8px; padding: 2px 10px; font-size: 13px; font-weight: 600; box-shadow: 0 1px 4px rgba(0, 0, 0, .15); white-space: nowrap; }
+#worldpop { position: absolute; z-index: 15; width: 250px; background: #fff; border-radius: 12px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(20, 50, 70, .25); transform: translate(-40px, -100%); }
+#worldpop h3 { margin: 0 0 6px; font-size: 15px; }
+#worldpop ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
+#worldpop li { display: flex; gap: 8px; align-items: flex-start; }
+#worldpop li svg { width: 16px; height: 16px; flex: none; margin-top: 3px; color: var(--done); }
+
+/* 終點 */
+.final { position: absolute; z-index: 3; left: 1250px; top: 240px; width: 0; height: 0; }
+.final .lbl { position: absolute; left: -90px; top: 62px; width: 180px; text-align: center; display: grid; justify-items: center; gap: 4px; }
+.final .lbl b { background: #fff; border-radius: 8px; padding: 2px 10px; font-size: 14px; color: var(--ink-soft); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); }
+.final .lbl span { display: inline-flex; gap: 5px; align-items: center; background: #5d6570; color: #fff; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 2px 10px 2px 7px; }
+.final .lbl svg { width: 13px; height: 13px; }
+.cloud { animation: drift 9s ease-in-out infinite alternate; }
+.cloud.b { animation-duration: 12s; animation-direction: alternate-reverse; }
+@keyframes drift { to { transform: translateX(22px); } }
+
+/* 關卡 */
+.level { position: absolute; z-index: 4; left: 0; top: 0; width: 136px; margin: -36px 0 0 -68px; padding: 0; border: 0; background: none; transition: transform var(--move), opacity .4s; }
+.level.wait { z-index: 6; }
+.lv-in { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; position: relative; }
+.level.pop .lv-in { animation: pop .7s cubic-bezier(.3, 1.5, .5, 1) both; }
+@keyframes pop { 0% { transform: translateY(46px) scale(0); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; } }
+.level .disc { position: relative; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 24px; border: 4px solid var(--todo-edge); background: #fff; color: var(--ink-soft); box-shadow: 0 4px 0 rgba(0, 0, 0, .18); transition: background .4s, border-color .4s; font-variant-numeric: tabular-nums; }
+.level .disc svg { width: 30px; height: 30px; }
+.level.doing .disc { background: var(--doing); border-color: #fff; color: #fff; }
+.level.wait .disc { background: var(--wait); border-color: #fff; color: #fff; }
+.level.done .disc { background: var(--done); border-color: #fff; color: #fff; }
+.level.adjust .disc { background: var(--adjust); border-color: #fff; color: var(--adjust-ink); }
+.level.cancel .disc { width: 54px; height: 54px; margin: 5px 0; background: var(--cancel); border-color: #dfe3e7; color: #fff; box-shadow: none; }
+.level.doing .disc::before, .level.wait .disc::before, .level.wait .disc::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 4px solid var(--doing); animation: pulse 1.8s ease-out infinite; pointer-events: none; }
+.level.wait .disc::before, .level.wait .disc::after { border: 6px solid #ff8a2a; animation-duration: 1.3s; }
+.level.wait .disc::after { animation-delay: .65s; }
+@keyframes pulse { from { transform: scale(1); opacity: .9; } to { transform: scale(2); opacity: 0; } }
+.level.sel .disc { outline: 3px solid #fff; box-shadow: 0 0 0 7px #111, 0 4px 0 rgba(0, 0, 0, .18); }
+.level .name { background: #fff; color: var(--ink); border-radius: 8px; padding: 2px 9px; font-size: 14px; font-weight: 600; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); max-width: 136px; }
+.level.cancel .name { text-decoration: line-through; color: var(--ink-soft); background: #eef0f2; }
+.tag { position: absolute; left: calc(50% + 20px); top: -12px; z-index: 2; white-space: nowrap; font-size: 12px; font-weight: 800; padding: 2px 9px; border-radius: 6px; transform: rotate(-4deg); }
+.tag.low { left: 50%; top: auto; bottom: -30px; transform: translateX(-50%) rotate(-3deg); }
+.tag.sign { background: var(--adjust); color: var(--adjust-ink); border: 2px solid var(--adjust-ink); }
+.tag.new { background: var(--doing); color: #fff; border: 2px solid #fff; }
+
+/* 等你開門時，整張圖只有那道門亮著 */
+#dim { position: absolute; inset: 0; z-index: 5; background: rgba(16, 26, 40, .58); opacity: 0; pointer-events: none; transition: opacity .5s; }
+.stage.waiting #dim { opacity: 1; }
+
+/* AI 小角色與泡泡 */
+#robot { position: absolute; z-index: 7; left: 0; top: 0; width: 0; height: 0; transition: transform var(--move); pointer-events: none; }
+#robot svg { position: absolute; left: -34px; top: -118px; width: 68px; height: 84px; overflow: visible; transform-origin: 50% 95%; animation: bob 1.1s ease-in-out infinite alternate; }
+@keyframes bob { to { transform: translateY(-8px); } }
+/* 四種心情：work 做事中、wait 等你、happy 全部通關、sleep 沒事做 */
+#robot .m { display: none; }
+#robot.work .m-work, #robot.wait .m-wait, #robot.happy .m-happy, #robot.sleep .m-sleep { display: inline; }
+#robot.wait svg { animation: shake .28s linear infinite; }
+#robot.happy svg { animation: hop .7s cubic-bezier(.3, 0, .4, 1) infinite alternate; }
+#robot.sleep svg { animation: breathe 2.8s ease-in-out infinite alternate; }
+#robot.work .eye { animation: blinkEye 3.6s infinite; transform-box: fill-box; transform-origin: center; }
+#robot.wait .ant { fill: #ff8a2a; }
+#robot.sleep .ant { fill: #b9b3d6; }
+#robot .zz { font: 800 13px/1 var(--font); fill: #3b2a99; animation: zz 2.8s ease-out infinite; }
+#robot .zz.b { font-size: 9px; animation-delay: 1.4s; }
+#robot .spark { fill: #ffcf3f; stroke: #b98a00; stroke-width: 1; animation: twinkle .9s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+#robot .spark.b { animation-delay: .45s; }
+@keyframes shake { 0%, 100% { transform: translateX(-2px) rotate(-3deg); } 50% { transform: translateX(2px) rotate(3deg); } }
+@keyframes hop { from { transform: translateY(0) scale(1.04, .94); } to { transform: translateY(-14px) scale(.97, 1.04); } }
+@keyframes breathe { to { transform: scale(1.04, .95); } }
+@keyframes blinkEye { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+@keyframes zz { 0% { opacity: 0; transform: translate(0, 4px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(6px, -10px); } }
+@keyframes twinkle { from { transform: scale(.5); opacity: .5; } to { transform: scale(1.1); opacity: 1; } }
+#bubble { position: absolute; z-index: 8; left: 0; top: 0; width: 0; height: 0; transition: transform var(--move); }
+.bub { position: absolute; left: -160px; bottom: 0; width: 320px; background: #fff; border: 3px solid var(--doing); border-radius: 16px; padding: 10px 14px; font-size: 15px; font-weight: 500; box-shadow: 0 6px 16px rgba(20, 50, 70, .22); }
+.bub::after { content: ""; position: absolute; left: 50%; bottom: -10px; width: 14px; height: 14px; margin-left: -9px; background: inherit; border: solid; border-color: inherit; border-width: 0 3px 3px 0; transform: rotate(45deg); }
+.bub.wait { background: var(--wait-bg); border-color: var(--wait); }
+.bub.choice { background: var(--adjust-bg); border-color: #b98a00; }
+.bub p { margin: 0; }
+.bub .head { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; margin-bottom: 2px; }
+.bub .head svg { width: 16px; height: 16px; }
+.bub.wait .head { color: #8f3c05; }
+.bub .acts { display: flex; gap: 8px; margin-top: 10px; }
+.bub button { flex: 1; min-height: 44px; border-radius: 10px; border: 0; padding: 0 10px; font-weight: 700; font-size: 14px; }
+.bub.wait button { background: var(--wait); color: #fff; }
+.bub.choice button { background: var(--adjust-ink); color: #fff; }
+
+.level .name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.more { position: absolute; z-index: 4; background: #fff; color: var(--ink-soft); font-size: 12px; font-weight: 700; border-radius: 10px; padding: 2px 10px; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); white-space: nowrap; }
+#moreBefore { left: 300px; top: 590px; }
+#moreAfter { left: 1000px; top: 410px; }
+
+/* 桌面寵物模式（由桌面程式載入時） */
+.live-only { display: none !important; }
+html.live .live-only { display: inline-flex !important; }
+html.live .demo-only { display: none; }
+html.live body { padding: 0; background: var(--sea); }
+html.live .fit { border-radius: 0; box-shadow: none; }
+html.live .demo { -webkit-app-region: drag; }
+html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 8px; }
+.demo button.win svg { width: 18px; height: 18px; }
+.demo button#btnClose { width: 44px; padding: 0; justify-content: center; }
+
+.dash { animation: flow 1.2s linear infinite; }
+@keyframes flow { from { stroke-dashoffset: 26; } to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage *, .stage *::before, .stage *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="fit" id="fit">
+<div class="stage" id="stage">
+
+  <div class="demo">
+    <div class="demo-title">AI 任務闖關地圖 <small id="subTitle">範例任務：做一個社團報名網站</small></div>
+    <span class="demo-label demo-only">示範情境</span>
+    <button type="button" class="demo-only" data-sc="normal" aria-pressed="true">正常進行</button>
+    <button type="button" class="demo-only" data-sc="wait" aria-pressed="false">等你操作</button>
+    <button type="button" class="demo-only" data-sc="add" aria-pressed="false">做完後加功能</button>
+    <button type="button" class="demo-only" data-sc="interrupt" aria-pressed="false">做到一半插話</button>
+    <button type="button" class="demo-only" data-sc="small" aria-pressed="false">小修改</button>
+    <button type="button" class="demo-only" data-sc="change" aria-pressed="false">改變心意</button>
+    <button type="button" class="win live-only" id="btnMini"></button>
+    <button type="button" class="win live-only" id="btnClose" aria-label="關閉闖關地圖"></button>
+  </div>
+
+  <svg class="map" viewBox="0 0 1440 900" aria-hidden="true">
+    <!-- 三座島：走過的（淡）、現在的（鮮明）、終點（霧） -->
+    <path d="M-40 520 C60 430 260 470 360 560 C450 640 440 800 340 900 L-40 900 Z" fill="#d6e2cd"/>
+    <path d="M360 500 C400 330 620 250 820 290 C1010 320 1130 400 1120 540 C1110 690 960 800 740 800 C520 800 330 690 360 500 Z" fill="#a9dd92"/>
+    <path d="M470 520 C520 400 700 350 850 380 C980 410 1040 480 1010 570 C970 680 800 730 660 710 C520 690 440 620 470 520 Z" fill="#bfe8aa"/>
+    <path d="M1060 130 C1140 40 1340 40 1440 110 L1440 400 C1340 430 1150 410 1080 330 C1030 270 1020 190 1060 130 Z" fill="#cdd3de"/>
+    <g id="trees"></g>
+    <path id="rEdge" fill="none" stroke="#c9b584" stroke-width="34" stroke-linecap="round"/>
+    <path id="rBase" fill="none" stroke="#ecdcb4" stroke-width="26" stroke-linecap="round"/>
+    <path id="rDone" fill="none" stroke="#35a862" stroke-width="26" stroke-linecap="round"/>
+    <path id="rDash" class="dash" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="10 16"/>
+    <path id="rFinal" fill="none" stroke="#7d8590" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 14"/>
+    <path id="rCancel" fill="none" stroke="#7d8590" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 10"/>
+    <!-- 終點城堡 -->
+    <g transform="translate(1250 240)" fill="#aeb5c0" stroke="#7d8590" stroke-width="3" stroke-linejoin="round">
+      <path d="M-46 50 V-14 h12 v-10 h10 v10 h12 V-40 h-8 v-12 h8 v6 h8 v-6 h8 v6 h8 v-6 h8 v12 h-8 V-14 h12 v-10 h10 v10 h12 V50 Z"/>
+      <path d="M-10 50 V26 a10 10 0 0 1 20 0 V50" fill="#8d95a1"/>
+      <path d="M0 -52 V-78 l18 7 -18 7" fill="#cdd3de"/>
+    </g>
+    <g fill="#fff">
+      <g class="cloud" opacity=".92"><ellipse cx="1190" cy="262" rx="62" ry="24"/><ellipse cx="1232" cy="244" rx="40" ry="24"/></g>
+      <g class="cloud b" opacity=".88"><ellipse cx="1310" cy="208" rx="58" ry="22"/><ellipse cx="1280" cy="194" rx="34" ry="20"/></g>
+      <g class="cloud" opacity=".8"><ellipse cx="1330" cy="285" rx="50" ry="18"/></g>
+      <g class="cloud b" opacity=".85"><ellipse cx="1170" cy="180" rx="44" ry="17"/></g>
+    </g>
+  </svg>
+
+  <div class="final"><div class="lbl"><b id="finalName"></b><span id="finalLock"></span></div></div>
+  <div id="worlds"></div>
+  <div id="levels"></div>
+  <div class="more" id="moreBefore" hidden></div>
+  <div class="more" id="moreAfter" hidden></div>
+  <div id="dim"></div>
+  <div id="robot" class="work" aria-hidden="true">
+    <svg viewBox="0 0 68 84">
+      <ellipse cx="34" cy="80" rx="18" ry="3.5" fill="rgba(0,0,0,.22)"/>
+      <line x1="34" y1="16" x2="34" y2="6" stroke="#3b2a99" stroke-width="3" stroke-linecap="round"/>
+      <circle class="ant" cx="34" cy="5" r="4.5" fill="#ffcf3f" stroke="#3b2a99" stroke-width="2"/>
+      <rect x="4" y="40" width="9" height="20" rx="4.5" fill="#4d37b8"/>
+      <rect x="55" y="40" width="9" height="20" rx="4.5" fill="#4d37b8"/>
+      <rect x="20" y="66" width="10" height="12" rx="4" fill="#4d37b8"/>
+      <rect x="38" y="66" width="10" height="12" rx="4" fill="#4d37b8"/>
+      <rect x="9" y="14" width="50" height="56" rx="17" fill="#6b4ee6" stroke="#3b2a99" stroke-width="3"/>
+      <rect x="16" y="22" width="36" height="26" rx="10" fill="#fff"/>
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <g class="m m-work"><circle class="eye" cx="27" cy="35" r="4" fill="#1b2530"/><circle class="eye" cx="41" cy="35" r="4" fill="#1b2530"/><path d="M28 57 q6 5 12 0" stroke="#fff" stroke-width="2.5"/></g>
+        <g class="m m-wait"><path d="M22 32 l8 -3 M46 32 l-8 -3" stroke="#1b2530" stroke-width="2.5"/><circle cx="27" cy="38" r="3" fill="#1b2530"/><circle cx="41" cy="38" r="3" fill="#1b2530"/><path d="M28 60 q6 -5 12 0" stroke="#fff" stroke-width="2.5"/><path d="M60 20 q4 6 0 9 q-4 -3 0 -9 z" fill="#7cc7ff" stroke="#2b7fc0" stroke-width="1.2"/></g>
+        <g class="m m-happy"><path d="M22 37 q5 -7 10 0 M36 37 q5 -7 10 0" stroke="#1b2530" stroke-width="3"/><path d="M26 54 h16 q-8 11 -16 0 z" fill="#fff" stroke="#fff" stroke-width="1.5"/><path class="spark" d="M4 14 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z"/><path class="spark b" d="M64 4 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 z"/></g>
+        <g class="m m-sleep"><path d="M23 36 q4 3 8 0 M37 36 q4 3 8 0" stroke="#1b2530" stroke-width="2.5"/><circle cx="34" cy="58" r="2.5" stroke="#fff" stroke-width="2"/><text class="zz" x="56" y="14">z</text><text class="zz b" x="64" y="4">z</text></g>
+      </g>
+    </svg>
+  </div>
+  <div id="bubble"><div class="bub" id="bub" aria-live="polite"></div></div>
+  <div id="worldpop" hidden></div>
+
+  <div class="hud" id="where">
+    <div class="eyebrow">目前位置</div>
+    <h1 id="whereName"></h1>
+    <div class="goal" id="whereGoal"></div>
+    <div class="bar" role="progressbar" aria-label="本世界進度" aria-valuemin="0" id="barBox"><i id="barFill"></i></div>
+    <div class="count"><span>關卡 <b id="cntNow"></b></span><span id="cntDone"></span></div>
+  </div>
+  <div class="hud" id="sessions" hidden></div>
+  <div class="hud" id="said"><div class="eyebrow" id="saidLabel">你剛剛說</div><p id="saidText"></p></div>
+  <div class="hud" id="card" aria-live="polite"></div>
+  <div id="toast" role="status"></div>
+</div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const svg = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+const ICON = {
+  done: svg('<path d="M5 12.5l5 5L19 7"/>'),
+  wait: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+  adjust: svg('<path d="M14.5 6.5a4 4 0 0 0-5.2 5.2L4 17l3 3 5.3-5.3a4 4 0 0 0 5.2-5.2l-2.7 2.7-2.5-.5-.5-2.5z"/>'),
+  cancel: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  doing: svg('<path d="M8 5l10 7-10 7z"/>'),
+  todo: svg('<circle cx="12" cy="12" r="7"/>'),
+  flag: svg('<path d="M6 21V4"/><path d="M6 5h11l-2.5 4L17 13H6" fill="currentColor"/>'),
+  bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>')
+};
+const STATUS = { todo: '未開始', doing: '進行中', wait: '等你開門', done: '已通關', adjust: '施工中', cancel: '已拆除' };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pet = window.questPet || null;   // 桌面寵物模式才有
+const MAXV = 7;                         // 地圖上最多同時畫幾關，其餘收起來
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 範例資料：做一個社團報名網站 ---------- */
+const PAST = [
+  { name: '網站骨架', summary: '建立專案、選定網頁樣式、放上社團名稱' },
+  { name: '首頁平原', summary: '社團介紹、活動照片牆、我要報名按鈕' }
+];
+const L = {
+  f1: { id: 'f1', title: '設計報名欄位', plain: '決定要問報名者哪些資料，例如姓名、系級、聯絡方式。', tech: '定義表單欄位與必填規則' },
+  f2: { id: 'f2', title: '做出表單畫面', plain: '把報名表單畫出來，讓人可以在網頁上填寫。', tech: '建立 form.html 與 form.css' },
+  f3: { id: 'f3', title: '存下報名資料', plain: '有人送出表單後，把他填的資料好好存起來。', tech: 'POST /api/signup，寫入 SQLite' },
+  f4: { id: 'f4', title: '寄確認信', plain: '報名成功後，自動寄一封信告訴對方「收到了」。', tech: 'Gmail SMTP + nodemailer' },
+  f5: { id: 'f5', title: '測試整個流程', plain: '假裝自己是報名的人，從頭到尾走一遍，確認沒問題。', tech: '端對端測試：填表 → 儲存 → 通知' }
+};
+const lv = (id, status, more) => ({ ...L[id], status, ...more });
+const base = { round: 3, world: '報名表單森林', goal: '做出報名表單', pastWorlds: PAST, finalGoal: '上線城堡', waitingFor: null, choice: null, toast: null };
+const SCENARIOS = {
+  normal: { ...base,
+    userSaid: '幫我做報名表單，報名成功後要寄確認信',
+    aiSays: '我正在打「做出表單畫面」這關，打完就往下一關！',
+    levels: [lv('f1', 'done'), lv('f2', 'doing'), lv('f3', 'todo'), lv('f4', 'todo'), lv('f5', 'todo')] },
+  wait: { ...base,
+    userSaid: '好，繼續做寄確認信',
+    aiSays: '這道門要你的鑰匙才打得開。',
+    waitingFor: '請到 Gmail 建立「應用程式密碼」，貼回對話框',
+    levels: [lv('f1', 'done'), lv('f2', 'done'), lv('f3', 'done'),
+      lv('f4', 'wait', { reason: '等你開門：寄信要用你的 Gmail，只有你能拿到這把鑰匙' }), lv('f5', 'todo')] },
+  add: { ...base,
+    userSaid: '想讓報名的人可以上傳大頭照',
+    aiSays: '多了一關「上傳大頭照」！我先走回「做出表單畫面」，把上傳欄位補上。',
+    toast: '地圖更新！新增 1 關，1 關要回頭修',
+    levels: [lv('f1', 'done'),
+      lv('f2', 'adjust', { reason: '回頭修：因為你說「想讓報名的人可以上傳大頭照」，表單要多一個上傳欄位' }),
+      lv('f3', 'done'),
+      { id: 'fp', title: '上傳大頭照', status: 'todo', isNew: true, plain: '讓報名的人選一張照片，跟報名資料一起存起來。', tech: 'multipart 上傳 + 圖片壓縮', reason: '新關卡：因為你說「想讓報名的人可以上傳大頭照」' },
+      lv('f4', 'todo'), lv('f5', 'todo')] },
+  interrupt: { ...base,
+    userSaid: '等一下，報名資料我想改存到 Google 試算表',
+    aiSays: '我先停在「存下報名資料」這關。',
+    choice: { question: '要先打完這關，還是現在改路線？', options: ['先打完這關', '現在改路線'] },
+    levels: [lv('f1', 'done'), lv('f2', 'done'),
+      lv('f3', 'adjust', { reason: '暫停：因為你說「報名資料我想改存到 Google 試算表」，等你決定怎麼走' }),
+      lv('f4', 'todo'), lv('f5', 'todo')] },
+  small: { ...base, round: 1, world: '把按鈕改紅色', goal: '把送出按鈕改成紅色', pastWorlds: [], finalGoal: '任務完成',
+    userSaid: '把送出按鈕改成紅色', aiSays: '在「把按鈕改紅色」這關：正在修改 style.css…', activity: { text: '正在修改 style.css' },
+    levels: [{ id: 'solo1', title: '把按鈕改紅色', status: 'doing', plain: '把送出按鈕的顏色改成紅色，讓人更容易看到', tech: '修改 style.css 按鈕背景色',
+      steps: [{ title: '找到按鈕', done: true }, { title: '改顏色', done: false }], touched: [{ verb: '改了', name: 'index.html' }] }] },
+  change: { ...base,
+    userSaid: '確認信不要了，改成傳 LINE 通知我就好',
+    aiSays: '「寄確認信」這關拆掉了，改走 LINE 通知這條新路！',
+    toast: '地圖更新！拆掉 1 關，開了 1 條新路',
+    levels: [lv('f1', 'done'), lv('f2', 'done'), lv('f3', 'done'),
+      lv('f4', 'cancel', { reason: '已拆除：你說「確認信不要了，改成傳 LINE 通知我就好」' }),
+      { id: 'fl', title: 'LINE 通知', status: 'doing', isNew: true, plain: '有人報名成功，就傳一則 LINE 訊息給你。', tech: 'LINE Messaging API', reason: '新關卡：取代原本的「寄確認信」，因為你說「改成傳 LINE 通知我就好」' },
+      lv('f5', 'todo')] }
+};
+
+/* ---------- 座標：預先排好的插槽 ---------- */
+const WORLD_POS = [{ x: 115, y: 600 }, { x: 275, y: 678 }];
+const FINAL = { x: 1250, y: 250 };
+const SLOTS = {};
+for (let n = 1; n <= 8; n++) {
+  SLOTS[n] = Array.from({ length: n }, (_, i) => {
+    const t = n === 1 ? .5 : i / (n - 1);
+    return { x: Math.round(440 + t * 530), y: Math.round(610 - t * 90 + (i % 2 ? -30 : 30)) };
+  });
+}
+function layout(plan) {
+  const active = plan.levels.filter(l => l.status !== 'cancel');
+  const slots = SLOTS[Math.min(Math.max(active.length, 1), 8)];
+  const pos = {};
+  active.forEach((l, i) => { pos[l.id] = slots[Math.min(i, slots.length - 1)]; });
+  plan.levels.forEach((l, i) => {
+    if (l.status !== 'cancel') return;
+    const prev = plan.levels.slice(0, i).reverse().find(x => x.status !== 'cancel');
+    const next = plan.levels.slice(i + 1).find(x => x.status !== 'cancel');
+    const a = prev ? pos[prev.id] : next ? pos[next.id] : slots[0];
+    const b = next ? pos[next.id] : a;
+    const origin = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    pos[l.id] = { x: origin.x, y: origin.y + 135, origin };
+  });
+  return pos;
+}
+
+/* ---------- 道路（貝茲曲線串接） ---------- */
+function segs(P) {
+  return P.slice(0, -1).map((p, i) => {
+    const p0 = P[i - 1] || p, p1 = P[i + 1], p2 = P[i + 2] || p1;
+    return `C${p.x + (p1.x - p0.x) / 6} ${p.y + (p1.y - p0.y) / 6} ${p1.x - (p2.x - p.x) / 6} ${p1.y - (p2.y - p.y) / 6} ${p1.x} ${p1.y}`;
+  });
+}
+function drawRoads(plan, pos) {
+  const active = plan.levels.filter(l => l.status !== 'cancel');
+  const P = [...roadStart, ...active.map(l => pos[l.id])];
+  const s = segs(P), head = `M${P[0].x} ${P[0].y}`;
+  const full = head + s.join('');
+  let reach = -1;
+  active.forEach((l, i) => { if (l.status !== 'todo') reach = i; });
+  $('rEdge').setAttribute('d', full);
+  $('rBase').setAttribute('d', full);
+  $('rDash').setAttribute('d', full);
+  $('rDone').setAttribute('d', head + s.slice(0, roadStart.length + reach).join(''));
+  const last = P[P.length - 1];
+  $('rFinal').setAttribute('d', `M${last.x} ${last.y - 20} Q${(last.x + FINAL.x) / 2 + 30} ${last.y - 90} ${FINAL.x - 50} ${FINAL.y + 60}`);
+  // 已拆除：斷掉的虛線連回原位置（中間留一段缺口）
+  let c = '';
+  plan.levels.filter(l => l.status === 'cancel').forEach(l => {
+    const p = pos[l.id], o = p.origin; if (!o) return;
+    const at = t => `${p.x + (o.x - p.x) * t} ${p.y - 30 + (o.y - p.y + 30) * t}`;
+    c += `M${at(0)}L${at(.38)}M${at(.62)}L${at(1)}`;
+  });
+  $('rCancel').setAttribute('d', c);
+}
+
+/* ---------- 狀態 ---------- */
+let roadStart = WORLD_POS, follow = true, plan = null, prev = null, selected = null, shown = {}, raf = 0, toastTimer = 0;
+const els = new Map();
+const put = (el, p) => { el.style.transform = `translate(${p.x}px, ${p.y}px)`; };
+const robotLevel = p => ['wait', 'doing', 'adjust'].map(s => p.levels.find(l => l.status === s)).find(Boolean)
+  || [...p.levels].reverse().find(l => l.status === 'done') || p.levels.find(l => l.status !== 'cancel') || p.levels[0];
+// 關卡太多時，只畫角色附近的幾關
+function windowed(p, robotAt) {
+  const act = p.levels.filter(l => l.status !== 'cancel');
+  if (act.length <= MAXV) return { levels: p.levels, before: 0, after: 0 };
+  const r = Math.max(act.indexOf(robotAt), 0);
+  const start = Math.min(Math.max(r - 3, 0), act.length - MAXV);
+  const vis = new Set(act.slice(start, start + MAXV));
+  let lastAct = null;
+  const levels = p.levels.filter(l => {
+    if (l.status !== 'cancel') { lastAct = l; return vis.has(l); }
+    return vis.has(lastAct || act[0]);
+  });
+  return { levels, before: start, after: act.length - start - MAXV };
+}
+const signText = (p, l) => (p.choice && robotLevel(p) === l) ? '暫停' : '回頭修';
+
+function render(next, opts = {}) {
+  prev = plan; plan = next;
+  const first = !prev;
+  const active = plan.levels.filter(l => l.status !== 'cancel');
+  const robotAt = robotLevel(plan);
+  const view = windowed(plan, robotAt);
+  const pos = layout(view);
+  roadStart = WORLD_POS.slice(-Math.max(Math.min(plan.pastWorlds.length, WORLD_POS.length), 1));
+  const viewActive = view.levels.filter(l => l.status !== 'cancel');
+  if (opts.resetSelection || !view.levels.some(l => l.id === selected)) follow = true;
+  if (follow) selected = robotAt.id;
+  $('moreBefore').hidden = !view.before; $('moreBefore').textContent = `前面 ${view.before} 關已走過`;
+  $('moreAfter').hidden = !view.after; $('moreAfter').textContent = `後面還有 ${view.after} 關`;
+
+  // 比對新舊計畫
+  const old = new Map((prev ? prev.levels : []).map(l => [l.id, l]));
+  const diff = { added: 0, cancelled: 0, rework: 0 };
+  plan.levels.forEach(l => {
+    const o = old.get(l.id);
+    if (!o) { if (!first) diff.added++; return; }
+    if (l.status === 'cancel' && o.status !== 'cancel') diff.cancelled++;
+    if (l.status === 'adjust' && o.status === 'done') diff.rework++;
+  });
+
+  // 關卡元素：新增的彈出來，其餘滑到新位置
+  const keep = new Set(view.levels.map(l => l.id));
+  els.forEach((el, id) => { if (!keep.has(id)) { el.style.opacity = 0; setTimeout(() => el.remove(), 400); els.delete(id); delete shown[id]; } });
+  view.levels.forEach(l => {
+    let el = els.get(l.id);
+    if (!el) {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.innerHTML = '<span class="lv-in"></span>';
+      el.addEventListener('click', () => { selected = l.id; follow = l.id === robotLevel(plan).id; markSelected(); renderCard(); });
+      put(el, pos[l.id]);
+      if (!first) el.classList.add('pop');
+      $('levels').appendChild(el);
+      els.set(l.id, el);
+    } else { el.classList.remove('pop'); }
+    const num = active.indexOf(l) + 1;
+    el.className = `level ${l.status}${el.classList.contains('pop') ? ' pop' : ''}`;
+    el.setAttribute('aria-label', `${num ? '關卡 ' + num + '：' : ''}${l.title}，狀態：${STATUS[l.status]}`);
+    const low = viewActive.indexOf(l) % 2 === 0 ? ' low' : '';   // 位置偏低的關卡，牌子掛下面才不會擋到鄰居
+    const tag = l.status === 'adjust' ? `<span class="tag sign${low}">${signText(plan, l)}</span>` : l.isNew ? `<span class="tag new${low}">新關卡</span>` : '';
+    const face = (l.status === 'todo' || l.status === 'doing') ? num : ICON[l.status];
+    el.firstChild.innerHTML = `${tag}<span class="disc">${face}</span><span class="name">${esc(l.title)}</span>`;
+    requestAnimationFrame(() => put(el, pos[l.id]));
+  });
+  markSelected();
+
+  // 角色與泡泡用走的
+  put($('robot'), pos[robotAt.id]);
+  put($('bubble'), { x: pos[robotAt.id].x, y: pos[robotAt.id].y - 132 });
+  renderBubble();
+  $('robot').className = active.some(l => l.status === 'wait') ? 'wait'
+    : active.length && active.every(l => l.status === 'done') ? 'happy'
+    : active.some(l => l.status === 'doing' || l.status === 'adjust') ? 'work' : 'sleep';
+  $('stage').classList.toggle('waiting', plan.levels.some(l => l.status === 'wait'));
+
+  // 道路跟著關卡一起滑
+  cancelAnimationFrame(raf);
+  const from = {};
+  Object.keys(pos).forEach(id => { from[id] = shown[id] || pos[id]; });
+  const t0 = performance.now(), dur = (first || reduced) ? 0 : 800;
+  const step = now => {
+    const t = dur ? Math.min((now - t0) / dur, 1) : 1;
+    const e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const cur = {};
+    Object.keys(pos).forEach(id => {
+      const a = from[id], b = pos[id];
+      cur[id] = { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, origin: b.origin };
+    });
+    shown = cur;
+    drawRoads(view, cur);
+    if (t < 1) raf = requestAnimationFrame(step);
+  };
+  step(t0);
+
+  // 固定資訊
+  const done = active.filter(l => l.status === 'done').length;
+  const at = Math.max(active.indexOf(robotAt), 0) + 1;
+  $('whereName').textContent = `世界 ${plan.round}・${plan.world}`;
+  $('whereGoal').textContent = `這一輪的目標：${plan.goal}`;
+  $('barFill').style.width = (active.length ? done / active.length * 100 : 0) + '%';
+  $('barBox').setAttribute('aria-valuemax', active.length);
+  $('barBox').setAttribute('aria-valuenow', done);
+  $('cntNow').textContent = `${at} / ${active.length}`;
+  $('cntDone').textContent = `已通關 ${done} 關`;
+  $('saidLabel').textContent = plan.source === 'chat' ? '這次的任務' : '你剛剛說';
+  $('saidText').textContent = `「${plan.userSaid}」`;
+  $('finalName').textContent = plan.finalGoal;
+  renderWorlds();
+  renderSessions(plan);
+  renderCard();
+
+  // 只有結構改變才通知
+  let msg = plan.toast;
+  if (msg === undefined && (diff.added || diff.cancelled || diff.rework)) {
+    msg = '地圖更新！' + [diff.added && `新增 ${diff.added} 關`, diff.cancelled && `拆掉 ${diff.cancelled} 關`, diff.rework && `${diff.rework} 關要回頭修`].filter(Boolean).join('，');
+  }
+  if (msg && !opts.quiet) showToast(msg); else hideToast();
+}
+
+function markSelected() { els.forEach((el, id) => el.classList.toggle('sel', id === selected)); }
+
+function renderBubble() {
+  const b = $('bub');
+  if (plan.waitingFor) {
+    b.className = 'bub wait';
+    b.innerHTML = `<div class="head">${ICON.wait}等你開門</div><p>${esc(plan.waitingFor)}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
+    if (!pet) $('keyBtn').addEventListener('click', () => {
+      render({ ...plan, waitingFor: null, toast: null, aiSays: '收到鑰匙了！門打開，繼續前進。',
+        levels: plan.levels.map(l => l.status === 'wait' ? { ...l, status: 'doing', reason: '門已打開：你交出了鑰匙' } : l) }, { quiet: true });
+    });
+  } else if (plan.choice) {
+    b.className = 'bub choice';
+    b.innerHTML = `<p>${esc(plan.aiSays)}<br><b>${esc(plan.choice.question)}</b></p><div class="acts">${plan.choice.options.map((o, i) => `<button type="button" data-opt="${i}">${esc(o)}</button>`).join('')}</div>`;
+    b.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => choose(+btn.dataset.opt)));
+  } else {
+    b.className = 'bub';
+    b.innerHTML = `<p>${esc(plan.aiSays)}</p>`;
+  }
+}
+function choose(i) {
+  const cur = robotLevel(plan);
+  const finish = i === 0;
+  render({ ...plan, choice: null, toast: null,
+    aiSays: finish ? `好，我先把「${cur.title}」打完，下一關再照你說的改路線。` : `好，現在改路線！「${cur.title}」這關我回頭重做，照你說的來。`,
+    levels: plan.levels.map(l => l !== cur ? l : finish
+      ? { ...l, status: 'doing', reason: `你選了「${plan.choice.options[0]}」：這關照原計畫打完，再處理你說的「${plan.userSaid}」` }
+      : { ...l, status: 'adjust', reason: `回頭修：你選了「${plan.choice.options[1]}」，因為你說「${plan.userSaid}」` }) }, { quiet: true });
+}
+
+function renderCard() {
+  const l = plan.levels.find(x => x.id === selected); if (!l) return;
+  const num = plan.levels.filter(x => x.status !== 'cancel').indexOf(l) + 1;
+  const working = (l.status === 'doing' || l.status === 'adjust') && plan.activity;
+  const tl = l.touched || [];
+  const nowHtml = working ? `<p class="now">${ICON.doing}<span>${plan.activity.done ? '剛剛' : '現在'}：${esc(plan.activity.text)}</span></p>` : '';
+  const touchedHtml = tl.length ? `<div class="tlabel">這次動過的檔案</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(t.verb)} ${esc(t.name)}</span></li>`).join('')}${tl.length > 6 ? `<li><span>還有 ${tl.length - 6} 個</span></li>` : ''}</ul>` : '';
+  $('card').innerHTML = `
+    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${num ? '關卡 ' + num : '已移出主路'}</span></div>
+    <h2>${esc(l.title)}</h2>
+    <p>${esc(l.plain)}</p>
+    ${nowHtml}${touchedHtml}
+    ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>要請你做的事</b>${esc(plan.waitingFor)}</p>` : ''}
+    ${l.steps && l.steps.length ? `<ul class="steps">${l.steps.map(st => `<li class="${st.done ? 'ok' : ''}">${st.done ? ICON.done : ICON.todo}<span>${esc(st.title)}</span></li>`).join('')}</ul>` : ''}
+    ${l.reason ? `<p class="why"><b>為什麼變了</b>${esc(l.reason)}</p>` : ''}
+    <p class="tech"><span>技術細節</span>${esc(l.tech)}</p>`;
+}
+
+function renderSessions(p) {
+  const box = $('sessions'), list = p.sessions || [];
+  if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  const af = document.activeElement, focusId = af && af.classList && af.classList.contains('srow') ? af.dataset.id : null;
+  box.hidden = false;
+  box.innerHTML = `<div class="eyebrow">Claude Code 對話（${list.length}）</div><div class="slist">${list.map(x => {
+    const icon = x.waiting ? ICON.wait : (x.total && x.done === x.total) ? ICON.done : x.mood === 'work' ? ICON.doing : ICON.todo;
+    const pct = x.total ? Math.round(x.done / x.total * 100) : 0;
+    return `<button type="button" class="srow${x.id === p.selected ? ' sel' : ''}${x.waiting ? ' w' : ''}" data-id="${esc(x.id)}" aria-pressed="${x.id === p.selected}" aria-label="${esc(x.name)}，${x.waiting ? '在等你' : `已通關 ${x.done} / ${x.total}`}，點一下切換">
+      <span class="sic">${icon}</span><span class="snm">${esc(x.name)}</span><span class="sbar"><i style="width:${pct}%"></i></span><span class="scnt">${x.waiting ? '等你' : `${x.done}/${x.total}`}</span></button>`;
+  }).join('')}</div>`;
+  if (focusId) { const el = [...box.querySelectorAll('.srow')].find(b => b.dataset.id === focusId); if (el) el.focus(); }
+}
+$('sessions').addEventListener('click', e => {
+  const b = e.target.closest('.srow'); if (!b) return;
+  if (pet) pet.select(b.dataset.id); else demoSelect(b.dataset.id);
+});
+
+function renderWorlds() {
+  const box = $('worlds');
+  if (box.dataset.key === JSON.stringify(plan.pastWorlds)) return;
+  box.dataset.key = JSON.stringify(plan.pastWorlds);
+  box.innerHTML = '';
+  plan.pastWorlds.slice(-WORLD_POS.length).forEach((w, i, arr) => {
+    const n = plan.round - arr.length + i;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'world';
+    b.setAttribute('aria-label', `世界 ${n}：${w.name}，已通過。看這一輪做了什麼`);
+    b.innerHTML = `<span class="disc">${ICON.flag}</span><span class="name">世界 ${n}・${esc(w.name)}</span>`;
+    const wp = WORLD_POS[WORLD_POS.length - arr.length + i];
+    put(b, wp);
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const pop = $('worldpop');
+      if (!pop.hidden && pop.dataset.w === String(i)) { pop.hidden = true; return; }
+      pop.dataset.w = i;
+      pop.style.left = wp.x + 'px'; pop.style.top = (wp.y - 52) + 'px';
+      pop.innerHTML = `<h3>世界 ${n}・${esc(w.name)}　已通過</h3><ul>${w.summary.split(/[、，,]/).map(s => `<li>${ICON.done}<span>${esc(s.trim())}</span></li>`).join('')}</ul>`;
+      pop.hidden = false;
+    });
+    box.appendChild(b);
+  });
+}
+document.addEventListener('click', () => { $('worldpop').hidden = true; });
+
+function showToast(msg) {
+  const t = $('toast');
+  t.innerHTML = ICON.bell + esc(msg);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 5000);
+}
+function hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('show'); }
+
+/* ---------- 裝飾：樹 ---------- */
+$('trees').innerHTML = [[395, 470, 1], [505, 345, 1], [660, 318, 1], [870, 335, 1], [1040, 430, 1], [1075, 610, 1], [610, 752, 1], [930, 720, 1], [700, 440, 1],
+  [60, 520, 0], [200, 500, 0], [330, 790, 0], [40, 720, 0]].map(([x, y, live]) =>
+  `<g transform="translate(${x} ${y})" opacity="${live ? 1 : .55}"><rect x="-3" y="6" width="6" height="14" rx="2" fill="#8a6a45"/><circle cx="0" cy="-2" r="15" fill="${live ? '#4fae5f' : '#8fb58c'}"/><circle cx="-9" cy="5" r="10" fill="${live ? '#5fbd6c' : '#9cc099'}"/><circle cx="9" cy="5" r="10" fill="${live ? '#43a054' : '#86ad83'}"/></g>`).join('');
+$('finalLock').innerHTML = ICON.wait + '未解鎖';
+
+/* ---------- 示範切換 ---------- */
+// 示範版的第二個對話（blog），讓清單與切換看得到
+const DEMO_BLOG = { ...base, round: 1, world: '部落格草稿島', goal: '寫完第一篇文章', pastWorlds: [], finalGoal: '發布文章',
+  userSaid: '幫我把第一篇文章的草稿寫完', aiSays: '我正在打「寫結尾」這關，打完就往下一關！',
+  levels: [lv('f1', 'done', { title: '列出文章大綱' }), lv('f2', 'done', { title: '寫開頭' }), lv('f3', 'done', { title: '寫中段' }), lv('f4', 'doing', { title: '寫結尾' })] };
+const sumOf = p => {
+  const act = p.levels.filter(l => l.status !== 'cancel'), done = act.filter(l => l.status === 'done').length;
+  return { done, total: act.length, waiting: act.some(l => l.status === 'wait'), mood: act.some(l => l.status === 'doing' || l.status === 'adjust') ? 'work' : 'sleep' };
+};
+let demoClub = null, demoSel = 'club';
+function demoShow(opts) {
+  const p = structuredClone(demoSel === 'blog' ? DEMO_BLOG : demoClub);
+  p.sessions = [{ id: 'club', name: 'club-signup', ...sumOf(demoClub) }, { id: 'blog', name: 'blog', ...sumOf(DEMO_BLOG) }];
+  p.selected = demoSel;
+  render(p, opts);
+}
+function demoSelect(id) { demoSel = id; demoShow({ resetSelection: true, quiet: true }); }
+document.querySelectorAll('.demo button[data-sc]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.demo button[data-sc]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  demoClub = structuredClone(SCENARIOS[b.dataset.sc]); demoSel = 'club';
+  demoShow({ resetSelection: true });
+}));
+
+/* ---------- 等比縮放 ---------- */
+function fit() {
+  const s = pet ? Math.min(innerWidth / 1440, innerHeight / 900) : Math.min((innerWidth - 32) / 1440, (innerHeight - 32) / 900, 1.6);
+  const k = Math.max(s, .2);
+  $('fit').style.width = 1440 * k + 'px'; $('fit').style.height = 900 * k + 'px';
+  $('stage').style.transform = `scale(${k})`;
+}
+addEventListener('resize', fit); fit();
+
+if (pet) {
+  document.documentElement.classList.add('live'); fit();
+  $('btnMini').innerHTML = svg('<path d="M4 12h12M11 7l5 5-5 5M20 4v16"/>') + '縮到旁邊';
+  $('btnClose').innerHTML = ICON.cancel;
+  $('btnMini').addEventListener('click', () => pet.minimize());
+  $('btnClose').addEventListener('click', () => pet.close());
+  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : '等待 Claude Code 連線'; render(p); });
+  pet.ready();
+} else {
+  demoClub = structuredClone(SCENARIOS.normal); demoShow();
+}
+/* 之後接上真正的 AI：把每次回覆最後的 JSON 丟進來就會更新地圖 */
+window.QuestMap = { update: p => render(p, { resetSelection: true }), scenarios: SCENARIOS };
+})();
+</script>
+</body>
+</html>

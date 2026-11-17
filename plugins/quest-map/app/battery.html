@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>闖關進度</title>
+<style>
+  /* 邊緣水位的小把手：顯示倒滿了幾杯，點一下展開地圖，按住可以拖 */
+  :root { --shell: #12161d; --shell-edge: #2b323d; --text: #f1f3f6; --water: #8fd3ff; --wait: #ff8a2a; --full: #60d6aa; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  body { font-family: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; }
+  button { all: unset; box-sizing: border-box; cursor: grab; width: 100%; height: 100%; display: grid; place-items: center; touch-action: none; }
+  button.dragging { cursor: grabbing; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 9px; border-radius: 15px; background: linear-gradient(180deg, #1f2631, var(--shell)); border: 1px solid var(--shell-edge); color: var(--text); font-weight: 700; font-size: 14px; letter-spacing: .02em; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 4px 12px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .08); }
+  button:focus-visible .pill { outline: 2px solid #fff; outline-offset: 2px; }
+  .pill svg { width: 15px; height: 15px; flex: none; }
+  #count { max-width: 104px; overflow: hidden; text-overflow: ellipsis; }
+  .drop { color: var(--water); }
+  .lock { display: none; color: var(--wait); }
+  .full .drop { color: var(--full); }
+  .waiting .drop { display: none; }
+  .waiting .lock { display: block; }
+  .waiting .pill { color: var(--wait); border-color: var(--wait); animation: ring 1.3s ease-out infinite; }
+  @keyframes ring { from { box-shadow: 0 0 0 0 rgba(255, 138, 42, .85), 0 4px 12px rgba(0, 0, 0, .45); } to { box-shadow: 0 0 0 8px rgba(255, 138, 42, 0), 0 4px 12px rgba(0, 0, 0, .45); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+</head>
+<body>
+<button type="button" id="bat" aria-label="展開闖關地圖">
+  <span class="pill">
+    <svg class="drop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5c3.6 4.3 6.5 7.8 6.5 11.6a6.5 6.5 0 0 1-13 0C5.500 10.300 8.400 6.800 12 2.500z"/></svg>
+    <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    <span id="count">0/0</span>
+  </span>
+</button>
+<script>
+  const pet = window.questPet;
+  const bat = document.getElementById('bat'), count = document.getElementById('count');
+  function show(s) {
+    count.textContent = s.waiting ? (s.waitingName ? `等你 · ${s.waitingName}` : '等你') : `${s.done}/${s.total}`;
+    bat.classList.toggle('waiting', !!s.waiting);
+    bat.classList.toggle('full', !!s.total && s.done === s.total);
+    bat.setAttribute('aria-label', `${s.waiting ? (s.waitingName ? `${s.waitingName} 的 Claude 在等你。` : 'Claude 在等你。') : ''}已倒滿 ${s.done} 杯，共 ${s.total} 個任務。點一下展開闖關地圖，按住可以拖到別的位置`);
+    bat.title = s.waiting ? (s.waitingFor || 'Claude 在等你') : `已完成 ${s.done} / ${s.total} 個任務`;
+  }
+
+  // 點一下展開；按住拖超過幾個像素就變成搬家，放開會自動貼回螢幕邊緣
+  let start = null, moved = false;
+  bat.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    start = { x: e.screenX, y: e.screenY }; moved = false;
+    bat.setPointerCapture(e.pointerId);
+  });
+  bat.addEventListener('pointermove', e => {
+    if (!start) return;
+    const dx = e.screenX - start.x, dy = e.screenY - start.y;
+    if (!moved && Math.hypot(dx, dy) < 5) return;
+    if (!moved) { moved = true; bat.classList.add('dragging'); pet.dragStart(); }
+    pet.dragMove(dx, dy);
+  });
+  const finish = e => {
+    if (!start) return;
+    start = null; bat.classList.remove('dragging');
+    if (moved) pet.dragEnd();
+    else if (e.type === 'pointerup') pet.expand();
+  };
+  bat.addEventListener('pointerup', finish);
+  bat.addEventListener('pointercancel', finish);
+  bat.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pet.expand(); } });
+
+  pet.onSummary(show);
+  pet.onSide(() => {});
+  pet.ready();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "ai-quest-map",
+  "description": "把 Claude Code 的進度畫成闖關地圖的桌面寵物",
+  "owner": { "name": "Quest Map" },
+  "plugins": [
+    {
+      "name": "quest-map",
+      "source": "./plugins/quest-map",
+      "description": "桌面上的闖關地圖：用關卡、小機器人和螢幕邊緣的水位顯示 Claude Code 做到哪了、是不是在等你"
+    }
+  ]
+}

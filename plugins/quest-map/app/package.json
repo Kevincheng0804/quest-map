@@ -1,0 +1,16 @@
+{
+  "name": "quest-pet",
+  "version": "0.11.0",
+  "description": "AI 任務闖關地圖：陪你跑 Claude Code 的桌面寵物",
+  "main": "main.js",
+  "scripts": {
+    "build": "node build.js",
+    "start": "node build.js && electron .",
+    "demo": "node simulate.js",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "private": true
+}

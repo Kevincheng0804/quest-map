@@ -1,0 +1,5 @@
+node_modules/
+*.zip
+*.plugin
+*.png
+.DS_Store

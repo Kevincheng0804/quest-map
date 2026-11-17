@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>邊緣水位</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-hidden="true"></canvas>
+<script>
+/* 螢幕邊緣的水位：左右兩側各一條細水柱，底部相連，像杯子一樣從下往上滿。
+   一個任務 = 一杯水：進行中慢慢漲、上方有水流倒下來；任務完成倒滿、閃一下，再退掉換下一杯。 */
+const LOOK = {
+  side: 16,                // 左右水柱的寬度（像素）
+  bottom: 9,               // 底部那一條的厚度
+  top: 6,                  // 滿杯時頂端那一條的厚度
+  light: [176, 226, 255],  // 水面附近的顏色（淡藍）
+  deep: [78, 170, 240],    // 深處的顏色
+  wait: [255, 150, 60],    // 等你回覆時的顏色
+  full: [96, 214, 170],    // 全部任務完成時的顏色
+  alpha: 0.88
+};
+const c = document.getElementById('c'), g = c.getContext('2d');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let W = 0, H = 0, dpr = 1;
+let level = 0, target = 0, pending = null, holdUntil = 0, flash = 0;
+let s = { done: 0, total: 0, waiting: false, mood: 'sleep', cup: 0 }, lastDone = null;
+let tint = [...LOOK.light, ...LOOK.deep];
+
+function resize() {
+  dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+function show(next) {
+  const now = performance.now();
+  // 過了一個任務：先倒滿、亮一下，再換成下一杯的水位
+  if (lastDone !== null && next.done > lastDone && next.cup < 1) {
+    target = 1; pending = next.cup; holdUntil = now + 1700; flash = 1;
+  } else if (now < holdUntil) {
+    pending = next.cup;
+  } else {
+    target = next.cup; pending = null;
+    if (next.cup >= 1 && s.cup < 1) flash = 1;
+  }
+  lastDone = next.done; s = next;
+}
+
+const mix = (a, b, t) => a + (b - a) * t;
+function palette() {
+  const want = s.waiting ? [...LOOK.wait, ...LOOK.wait.map(v => v * 0.82)]
+    : (s.total && s.done === s.total) ? [...LOOK.full, ...LOOK.full.map(v => v * 0.72)]
+    : [...LOOK.light, ...LOOK.deep];
+  tint = tint.map((v, i) => mix(v, want[i], 0.06));
+  return tint;
+}
+
+function frame(ms) {
+  const t = ms / 1000;
+  if (pending !== null && ms >= holdUntil) { target = pending; pending = null; }
+  level += (target - level) * (reduced ? 1 : (target < level ? 0.07 : 0.035));
+  if (Math.abs(target - level) < 0.0005) level = target;
+  flash *= 0.965;
+
+  g.clearRect(0, 0, W, H);
+  const p = palette();
+  const pulse = s.waiting ? 0.72 + 0.28 * Math.sin(t * 5) : 1;
+  const a = LOOK.alpha * pulse;
+  const S = LOOK.side, B = LOOK.bottom;
+  const surface = H - B - level * (H - B);          // 水面的高度（越小越高）
+  const moving = !reduced && (s.mood === 'work' || Math.abs(target - level) > 0.002);
+  const amp = reduced ? 0 : (moving ? 3.2 : 1.6);   // 倒水時波浪比較大
+
+  const grad = g.createLinearGradient(0, Math.max(surface, 0), 0, H);
+  grad.addColorStop(0, `rgba(${p[0] | 0},${p[1] | 0},${p[2] | 0},${a})`);
+  grad.addColorStop(1, `rgba(${p[3] | 0},${p[4] | 0},${p[5] | 0},${a})`);
+  g.fillStyle = grad;
+
+  // 底部：杯底
+  if (level > 0.001 || s.total) g.fillRect(0, H - B, W, B);
+
+  // 左右水柱：水面是波浪，靠螢幕內側的邊也微微起伏
+  for (const dir of [1, -1]) {
+    const x0 = dir === 1 ? 0 : W;
+    if (level <= 0.001) continue;
+    g.beginPath();
+    g.moveTo(x0, H - B + 1);
+    g.lineTo(x0, surface + Math.sin(t * 2.6) * amp);
+    for (let i = 0; i <= S; i += 2) {
+      const y = surface + Math.sin(t * 2.6 + i / S * 4.2 + (dir === 1 ? 0 : 1.7)) * amp + Math.sin(t * 4.1 + i * 0.5) * amp * 0.35;
+      g.lineTo(x0 + dir * i, y);
+    }
+    for (let y = Math.max(surface, 0) + 6; y <= H - B; y += 10) {
+      g.lineTo(x0 + dir * (S + Math.sin(y / 46 - t * 1.6 + (dir === 1 ? 0 : 2)) * 2.2), y);
+    }
+    g.lineTo(x0 + dir * S, H - B + 1);
+    g.closePath(); g.fill();
+    // 貼著螢幕外緣的一道亮線，看起來像玻璃裡的水
+    g.fillStyle = `rgba(255,255,255,${0.35 * pulse})`;
+    g.fillRect(dir === 1 ? 1.5 : W - 3, Math.max(surface, 0) + 8, 1.5, Math.max(H - B - surface - 14, 0));
+    g.fillStyle = grad;
+  }
+
+  // 滿杯：頂端也接起來，四邊成一圈
+  if (level > 0.985) { g.globalAlpha = (level - 0.985) / 0.015; g.fillRect(0, 0, W, LOOK.top); g.globalAlpha = 1; }
+
+  // 倒水：進行中時，上方有細細的水流落到水面，水面濺起小水珠
+  if (!reduced && s.mood === 'work' && !s.waiting && level < 0.97 && surface > 30) {
+    for (const dir of [1, -1]) {
+      const x = dir === 1 ? S * 0.5 : W - S * 0.5;
+      const sway = Math.sin(t * 3 + dir) * 0.8;
+      const sg = g.createLinearGradient(0, 0, 0, surface);
+      sg.addColorStop(0, `rgba(${p[0] | 0},${p[1] | 0},${p[2] | 0},0)`);
+      sg.addColorStop(0.15, `rgba(${p[0] | 0},${p[1] | 0},${p[2] | 0},${a * 0.9})`);
+      sg.addColorStop(1, `rgba(${p[3] | 0},${p[4] | 0},${p[5] | 0},${a})`);
+      g.fillStyle = sg;
+      g.fillRect(x - 1.6 + sway, 0, 3.2, surface);
+      g.fillStyle = `rgba(255,255,255,${0.75})`;
+      for (let k = 0; k < 3; k++) {
+        const ph = (t * 1.8 + k / 3 + (dir === 1 ? 0 : 0.4)) % 1;
+        g.beginPath();
+        g.arc(x + dir * (ph * 9 - 2) * (k % 2 ? 1 : -0.6), surface - Math.sin(ph * Math.PI) * 11, 1.7 * (1 - ph) + 0.4, 0, 6.3);
+        g.fill();
+      }
+    }
+  }
+
+  // 倒滿的瞬間亮一下
+  if (flash > 0.02) {
+    g.fillStyle = `rgba(255,255,255,${flash * 0.55})`;
+    g.fillRect(0, 0, S + 3, H); g.fillRect(W - S - 3, 0, S + 3, H); g.fillRect(0, H - B - 2, W, B + 2);
+    if (level > 0.985) g.fillRect(0, 0, W, LOOK.top + 2);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+window.questPet.onSummary(show);
+window.questPet.ready();
+</script>
+</body>
+</html>
