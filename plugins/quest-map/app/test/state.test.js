@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSession, createHub, summarize, activityOf, summaryOf } = require('../state');
+const { createSession, createHub, summarize, activityOf, summaryOf, cleanPrompt } = require('../state');
 
 const P = 'pending', D = 'in_progress', C = 'completed';
 const prompt = text => ({ hook_event_name: 'UserPromptSubmit', prompt: text });
@@ -990,6 +990,51 @@ test('診斷：list() 不會用掉還沒顯示的通知', () => {
   hub.handle(ev('A', '/w/alpha', todos(['甲', D], ['乙', P])));
   hub.list(); hub.list();
   assert.equal(hub.plan().toast, '地圖更新！新增 1 關');
+});
+
+test('清理使用者的話：拿掉桌面版塞的系統提示，留下使用者自己打的字', () => {
+  const R = '<system-reminder>\nThe user started this session without choosing a folder. Do X.\n</system-reminder>';
+  assert.equal(cleanPrompt(`${R}\n請用 Bash 執行 ls`), '請用 Bash 執行 ls');
+  assert.equal(cleanPrompt(`請先看這個 ${R} 再做事`), '請先看這個 再做事');
+  assert.equal(cleanPrompt(`${R}${R}\n只有後面這句`), '只有後面這句', '多個區塊都拿掉');
+  assert.equal(cleanPrompt(R), '（系統訊息）', '只有系統提示時不會變成空白');
+  assert.equal(cleanPrompt(''), '（系統訊息）');
+  assert.equal(cleanPrompt(undefined), '（系統訊息）');
+});
+
+test('清理使用者的話：沒收尾的系統提示、編輯器標籤', () => {
+  assert.equal(cleanPrompt('改一下按鈕<system-reminder> 這裡沒有結尾'), '改一下按鈕');
+  assert.equal(cleanPrompt('<ide_opened_file>The user opened file.js</ide_opened_file>\n幫我修 bug'), '幫我修 bug');
+  assert.equal(cleanPrompt('<ide_selection>const a = 1;</ide_selection> 這段是做什麼的'), '這段是做什麼的');
+});
+
+test('清理使用者的話：排程任務顯示任務名稱；普通的角括號文字不被誤刪', () => {
+  assert.equal(cleanPrompt('<scheduled-task name="keepalive-check" file="x.md">\n每天檢查一次…'), '排程任務：keepalive-check');
+  assert.equal(cleanPrompt('請把 <div class="a"> 改成 <section>'), '請把 <div class="a"> 改成 <section>');
+  assert.equal(cleanPrompt('a <b> c'), 'a <b> c');
+  assert.equal(cleanPrompt('  多個\n\n  空白\t壓成一個  '), '多個 空白 壓成一個');
+});
+
+test('清理使用者的話：地圖上的「你剛剛說」、世界名稱、目標都是清理後的文字', () => {
+  const R = '<system-reminder>The user started this session without choosing a folder.</system-reminder>';
+  const { p } = run({ hook_event_name: 'UserPromptSubmit', prompt: `${R}\n把送出按鈕改成紅色` });
+  assert.equal(p.userSaid, '把送出按鈕改成紅色');
+  assert.equal(p.world, '把送出按鈕改成紅色');
+  assert.equal(p.goal, '把送出按鈕改成紅色');
+  assert.ok(!/system-reminder/.test(JSON.stringify(p)));
+  const sched = run({ hook_event_name: 'UserPromptSubmit', prompt: '<scheduled-task name="keepalive" x="1">跑一次</scheduled-task>' }).p;
+  assert.equal(sched.userSaid, '排程任務：keepalive');
+});
+
+test('沒選資料夾的對話：名稱叫「未選資料夾的對話」，重複的加編號，Windows 路徑也一樣', () => {
+  const hub = createHub();
+  const dirA = 'C:\\Users\\user\\AppData\\Roaming\\Claude\\scratch-workspaces\\aaa\\bbb\\scratch-2026-11-18-8cd41a';
+  const dirB = 'C:/Users/user/AppData/Roaming/Claude/scratch-workspaces/aaa/bbb/scratch-2026-11-18-ffffff';
+  hub.handle(ev('A', dirA, prompt('a')));
+  hub.handle(ev('B', dirB, prompt('b')));
+  hub.handle(ev('C', 'C:\\Users\\user', prompt('c')));
+  hub.handle(ev('D', '/home/me/scratch-workspaces-notes', prompt('d')));   // 名稱只是長得像，不算
+  assert.deepEqual(hub.plan().sessions.map(x => x.name), ['未選資料夾的對話', '未選資料夾的對話 #2', 'user', 'scratch-workspaces-notes']);
 });
 
 test('不認得的事件不會壞掉', () => {

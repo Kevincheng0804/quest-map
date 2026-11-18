@@ -9,6 +9,19 @@ const short = (s, n) => {
 // 兩個標題像不像（用相鄰兩字的重疊比例），用來分辨「改措辭」和「換成別件事」
 const grams = t => { const g = new Set(); t = t.toLowerCase().replace(/\s+/g, ''); for (let i = 0; i < t.length - 1; i++) g.add(t.slice(i, i + 2)); return g; };
 const alike = (a, b) => { const x = grams(a), y = grams(b); let n = 0; x.forEach(g => { if (y.has(g)) n++; }); return n / Math.max(Math.min(x.size, y.size), 1) >= 0.5; };
+// 使用者送出的文字常被桌面版或編輯器塞了一些不是使用者打的內容（系統提示、編輯器狀態、排程任務標籤），
+// 顯示前先拿掉，地圖上才會是使用者自己的話。其他原樣保留，不猜別的標籤。
+function cleanPrompt(text) {
+  let t = String(text == null ? '' : text);
+  const sched = t.match(/^\s*<scheduled-task\s+name="([^"]*)"/);
+  if (sched) return `排程任務：${sched[1]}`;
+  t = t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, ' ');
+  const open = t.indexOf('<system-reminder>');
+  if (open >= 0) t = t.slice(0, open);   // 沒收尾的：從那裡切到結尾
+  t = t.replace(/<(ide_[a-z_]+)>[\s\S]*?<\/\1>/g, ' ');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t || '（系統訊息）';
+}
 const baseName = p => String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop();
 
 // Bash 指令只分類、不顯示內容（指令裡可能有密碼或金鑰）
@@ -150,7 +163,8 @@ function createSession() {
     return st;
   };
 
-  function onPrompt(text) {
+  function onPrompt(raw) {
+    const text = cleanPrompt(raw);
     clearWait();
     S.activity = null; S.touched.clear(); S.summary = '';
     S.userSaid = short(text, 60);
@@ -466,7 +480,9 @@ function createHub() {
   function names() {
     const used = new Map(), out = new Map();
     for (const en of ordered()) {
-      const base = en.chat ? (en.title ? `Cowork・${short(en.title, 10)}` : 'Cowork') : (baseName(en.dir) || '對話');
+      const base = en.chat ? (en.title ? `Cowork・${short(en.title, 10)}` : 'Cowork')
+        : /scratch-workspaces[\\/]/.test(en.dir) ? '未選資料夾的對話'   // 桌面版沒選資料夾時建的暫存資料夾，名稱看不懂
+        : (baseName(en.dir) || '對話');
       const n = (used.get(base) || 0) + 1;
       used.set(base, n);
       out.set(en.id, n > 1 ? `${base} #${n}` : base);
@@ -572,4 +588,4 @@ function summarize(plan) {
   return { done, total: act.length, waiting, waitingFor, waitingName, mood, cup, others: Math.max(list.length - 1, 0) };
 }
 
-module.exports = { createHub, createSession, summarize, activityOf, summaryOf };
+module.exports = { createHub, createSession, summarize, activityOf, summaryOf, cleanPrompt };
