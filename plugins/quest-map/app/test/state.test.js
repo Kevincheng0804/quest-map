@@ -1045,3 +1045,29 @@ test('不認得的事件不會壞掉', () => {
   s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_input: { taskId: '99', status: C } });
   assert.equal(s.plan().levels.length, 1);
 });
+
+test('同資料夾：沒說過話的舊對話，在新對話開始時被清掉', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'old', project_dir: 'C:/Users/me/proj/footballpractice' }, 1000);
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'new', project_dir: 'c:\\Users\\me\\proj\\footballpractice\\' }, 2000);
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'new', project_dir: 'C:/Users/me/proj/footballpractice', prompt: 'hi' }, 2100);
+  const names = hub.list().map(x => x.name);
+  assert.deepEqual(names, ['footballpractice']);
+});
+
+test('同資料夾：說過話的舊對話保留，新的叫 #2；不同資料夾互不影響', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: '/w/proj', prompt: 'one' }, 1000);
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'b', project_dir: '/w/proj' }, 2000);
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'c', project_dir: '/w/other' }, 3000);
+  assert.deepEqual(hub.list().map(x => x.name), ['proj', 'proj #2', 'other']);
+});
+
+test('同資料夾：被清掉的是使用者選的對話時，回到自動模式', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'old', project_dir: '/w/proj' }, 1000);
+  assert.ok(hub.select('old'));
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'new', project_dir: '/w/proj', prompt: 'go' }, 2000);
+  assert.equal(hub.list().length, 1);
+  assert.equal(hub.plan().userSaid, 'go');
+});

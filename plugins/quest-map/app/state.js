@@ -440,7 +440,7 @@ function createSession() {
     if (S.levels.length && allDone()) S.aiSays = S.summary ? tr('says.taskDone', { summary: S.summary }) : tr('says.taskDone0');
     return true;
   }
-  return { handle, plan, peek, describe, progress, startChat, applyPlan };
+  return { handle, plan, peek, describe, progress, startChat, applyPlan, isFresh: () => !S.prompted && !S.levels.length };
 }
 
 // ---------- 多個 Claude Code 視窗 ----------
@@ -509,6 +509,11 @@ function createHub() {
       if (!en) { en = make(id, now); isNew = true; }
       const dir = e.project_dir || (en.dir ? '' : e.cwd);
       if (dir) en.dir = dir;
+      // 新對話開始時，同資料夾、從沒說過話的舊對話多半是換了編號卻沒送結束事件（接續舊對話等），直接清掉，免得清單多一列
+      if (isNew && en.dir) {
+        const key = dirKey(en.dir);
+        for (const x of ordered()) if (x !== en && !x.chat && dirKey(x.dir) === key && x.s.isFresh()) drop(x.id);
+      }
       const changed = en.s.handle(e);
       if (changed) { en.last = now; lastActive = id; }
       return changed || isNew;
