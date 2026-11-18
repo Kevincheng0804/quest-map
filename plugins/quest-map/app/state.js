@@ -130,6 +130,7 @@ function createSession() {
     S.aiSays = tr('says.door');
   }
   function archive() {
+    S.specBound = false;
     const r = real();
     S.pastWorlds.push({ name: S.world, summary: r.length ? r.map(l => disp(l).title).join(tr('sep')) : S.goal });
     S.round++; S.levels = []; S.solo = 'doing';
@@ -344,13 +345,16 @@ function createSession() {
   function handle(e) {
     if (e.cwd && !S.project) S.project = path.basename(e.cwd);
     const tool = e.tool_name, input = e.tool_input || {};
+    const isTodoTool = tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate';
+    if (S.specBound && isTodoTool) return false;   // 這個對話以規格任務檔為準
+    const spec = e.spec_tasks && S.prompted ? onSpecTasks(e.spec_tasks) : false;
     switch (e.hook_event_name) {
       case 'SessionStart': return true;
       case 'UserPromptSubmit': onPrompt(e.prompt || ''); return true;
       case 'PreToolUse': {
         // 工具要開始跑：只更新「現在在做什麼」。清單類工具（TodoWrite、Task*）等 PostToolUse 才處理，不然會重複建關卡
         const a = S.prompted ? activityOf(tool, input) : null;   // 還沒下過指令時不顯示動作
-        if (!a || (S.activity && S.activity.text === a.text)) return false;
+        if (!a || (S.activity && S.activity.text === a.text)) return spec;
         S.activity = a;
         return true;
       }
@@ -367,7 +371,7 @@ function createSession() {
         const rec = S.prompted && recordTouched(tool, input);
         if (a) S.activity = pastOf(a);   // 清單類工具回傳 null，維持上一個動作
         const cleared = clearWait();
-        return tick() || cleared || rec || (!!a && before !== S.activity.text);
+        return tick() || cleared || rec || spec || (!!a && before !== S.activity.text);
       }
       case 'PostToolUseFailure': {
         // 工具失敗時 Claude Code 只發這個、不發 PostToolUse。沒處理的話，按了同意但工具失敗，橘色會一直卡著
@@ -420,6 +424,29 @@ function createSession() {
   const peek = () => build();
   // ---------- Cowork／聊天：Claude 自己回報整份計畫 ----------
   const STEP_STATUS = { pending: 'pending', todo: 'pending', in_progress: 'in_progress', doing: 'in_progress', completed: 'completed', done: 'completed', deleted: 'deleted' };
+  // 規格工具的任務檔（tasks.md）：分組是一關、勾選項是小步驟。綁定後以它為準，忽略 TodoWrite
+  function onSpecTasks(d) {
+    const groups = (d && Array.isArray(d.groups) ? d.groups : []).filter(g => g && g.items && g.items.length);
+    if (!groups.length) return false;
+    const flat = groups.length === 1 && !groups[0].title;
+    const seen = new Set();
+    const uniq = t => { let x = t, k = 2; while (seen.has(x)) x = `${t} (${k++})`; seen.add(x); return x; };
+    const units = flat ? groups[0].items.map(i => ({ title: uniq(short(i.text, 24)), items: null, done: i.done }))
+      : groups.map((g, i) => ({ title: uniq(short(g.title || tr('step.item', { n: i + 1 }), 24)), items: g.items, done: g.items.every(x => x.done) }));
+    const first = units.findIndex(u => !u.done);
+    const todos = units.map((u, i) => ({ content: u.title, status: u.done ? 'completed' : i === first ? 'in_progress' : 'pending' }));
+    const wasBound = S.specBound;
+    S.specBound = true;
+    onTodos(todos);
+    if (d.name && !wasBound) S.world = short(d.name, 12);   // 第一次綁定：世界名稱用任務資料夾名稱
+    if (!flat) units.forEach(u => {
+      const lv = S.levels.find(l => l.title === u.title);
+      if (!lv) return;
+      S.labels.set(norm(u.title), { title: u.title, tech: tr('tech.spec', { title: u.title }), steps: u.items.map(x => short(x.text, 24)) });
+      S.prog.set(lv.id, { done: u.items.filter(x => x.done).length, total: u.items.length });
+    });
+    return true;
+  }
   function startChat(goal) {
     S.chat = true;
     if (!S.prompted) { S.prompted = true; if (S.solo === 'todo') S.solo = 'doing'; }
