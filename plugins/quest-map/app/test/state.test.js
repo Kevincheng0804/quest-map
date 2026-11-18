@@ -1058,8 +1058,8 @@ test('同資料夾：沒說過話的舊對話，在新對話開始時被清掉',
 test('同資料夾：說過話的舊對話保留，新的叫 #2；不同資料夾互不影響', () => {
   const hub = createHub();
   hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: '/w/proj', prompt: 'one' }, 1000);
-  hub.handle({ hook_event_name: 'SessionStart', session_id: 'b', project_dir: '/w/proj' }, 2000);
-  hub.handle({ hook_event_name: 'SessionStart', session_id: 'c', project_dir: '/w/other' }, 3000);
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'b', project_dir: '/w/proj', prompt: 'two' }, 2000);
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'c', project_dir: '/w/other', prompt: 'three' }, 3000);
   assert.deepEqual(hub.list().map(x => x.name), ['proj', 'proj #2', 'other']);
 });
 
@@ -1070,4 +1070,28 @@ test('同資料夾：被清掉的是使用者選的對話時，回到自動模�
   hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'new', project_dir: '/w/proj', prompt: 'go' }, 2000);
   assert.equal(hub.list().length, 1);
   assert.equal(hub.plan().userSaid, 'go');
+});
+
+test('還沒說過話的對話不列在清單也不當主角，第一次說話後才出現', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: '/w/proj', prompt: 'one' }, 1000);
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'b', project_dir: '/w/proj' }, 2000);
+  let p = hub.plan();
+  assert.equal(p.sessions.length, 1, '空殼對話不列出');
+  assert.equal(p.userSaid, 'one', '畫面仍是說過話的那個');
+  assert.equal(hub.list().find(x => x.fresh).fresh, true, '診斷仍看得到它，並標示 fresh');
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'b', project_dir: '/w/proj', prompt: 'two' }, 3000);
+  p = hub.plan();
+  assert.deepEqual(p.sessions.map(x => x.name), ['proj', 'proj #2']);
+  assert.equal(p.userSaid, 'two');
+});
+
+test('只有 SessionStart 時回到待命畫面；在等你的對話就算還沒說話也要出現', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'a', project_dir: '/w/proj' }, 1000);
+  assert.equal(hub.plan().sessions.length, 0);
+  assert.ok(!hub.plan().project);
+  hub.handle({ hook_event_name: 'Notification', session_id: 'a', project_dir: '/w/proj', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' }, 2000);
+  assert.equal(hub.plan().sessions.length, 1);
+  assert.equal(hub.plan().sessions[0].waiting, true);
 });

@@ -467,7 +467,7 @@ function createSession() {
     if (S.levels.length && allDone()) S.aiSays = S.summary ? tr('says.taskDone', { summary: S.summary }) : tr('says.taskDone0');
     return true;
   }
-  return { handle, plan, peek, describe, progress, startChat, applyPlan, isFresh: () => !S.prompted && !S.levels.length };
+  return { handle, plan, peek, describe, progress, startChat, applyPlan, isFresh: () => !S.prompted && !S.levels.length && !S.waitingFor };
 }
 
 // ---------- 多個 Claude Code 視窗 ----------
@@ -497,12 +497,15 @@ function createHub() {
     if (!en) { en = make('chat:main', now); en.chat = true; en.s.startChat(''); }
     return en;
   }
-  const shown = () => entries.get(selected) || entries.get(lastActive) || ordered()[0] || null;
+  // 還沒說過話、也沒有任何動靜的對話（剛開、接續舊對話前的空殼）不列出來、不當主角，等它第一次動作才出現
+  const active = () => ordered().filter(x => !x.s.isFresh());
+  const shown = () => entries.get(selected) || (entries.has(lastActive) && !entries.get(lastActive).s.isFresh() ? entries.get(lastActive) : null)
+    || active().sort((a, b) => b.last - a.last)[0] || null;
 
   // 顯示名稱：資料夾名稱，重複的加編號（club-signup、club-signup #2）
   function names() {
     const used = new Map(), out = new Map();
-    for (const en of ordered()) {
+    for (const en of active()) {
       const base = en.chat ? (en.title ? `Cowork・${short(en.title, 10)}` : 'Cowork')
         : /scratch-workspaces[\\/]/.test(en.dir) ? tr('name.scratch')   // 桌面版沒選資料夾時建的暫存資料夾，名稱看不懂
         : (baseName(en.dir) || tr('name.chat'));
@@ -572,7 +575,7 @@ function createHub() {
     // 診斷用：地圖目前認得哪些對話（不含指令、檔案或你說的話）。peek 不會用掉通知
     list() {
       const nm = names();
-      return ordered().map(x => { const s = summarize(x.s.peek()); return { name: nm.get(x.id), done: s.done, total: s.total, waiting: s.waiting, chat: !!x.chat, lastAt: new Date(x.last).toISOString() }; });
+      return ordered().map(x => { const s = summarize(x.s.peek()); return { name: nm.get(x.id) || '(' + (baseName(x.dir) || '?') + ')', ...(x.s.isFresh() ? { fresh: true } : {}), done: s.done, total: s.total, waiting: s.waiting, chat: !!x.chat, lastAt: new Date(x.last).toISOString() }; });
     },
     select(id) {
       if (id === null) { selected = null; return true; }
@@ -586,7 +589,7 @@ function createHub() {
       const en = shown(), nm = names();
       const p = (en ? en.s : idle).plan();
       if (en) p.project = nm.get(en.id);
-      p.sessions = ordered().map(x => ({ id: x.id, name: nm.get(x.id), ...summarize(x.s.peek()) }));
+      p.sessions = active().map(x => ({ id: x.id, name: nm.get(x.id), ...summarize(x.s.peek()) }));
       p.selected = en ? en.id : null;
       p.pinned = !!(selected && entries.has(selected));
       return p;
