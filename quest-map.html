@@ -192,6 +192,8 @@ svg.map { position: absolute; inset: 0; z-index: 1; }
 .bub .head { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; margin-bottom: 2px; }
 .bub .head svg { width: 16px; height: 16px; }
 .bub.wait .head { color: #8f3c05; }
+.bub .waitage { margin-top: 4px; font-size: 12.5px; font-weight: 600; color: #8f3c05; }
+.bub .waitage:empty { display: none; }
 .bub .acts { display: flex; gap: 8px; margin-top: 10px; }
 .bub button { flex: 1; min-height: 44px; border-radius: 10px; border: 0; padding: 0 10px; font-weight: 700; font-size: 14px; }
 .bub.wait button { background: var(--wait); color: #fff; }
@@ -566,11 +568,20 @@ function render(next, opts = {}) {
 
 function markSelected() { els.forEach((el, id) => el.classList.toggle('sel', id === selected)); }
 
+// 等了多久。Claude Code 沒有「你按了同意」的事件，所以工具跑很久時橘色會一直在，這行字讓人知道是不是卡住了
+function waitAgeText(since) {
+  if (!since) return '';
+  const sec = Math.max(0, Math.floor((Date.now() - since) / 1000)), m = Math.floor(sec / 60);
+  const base = m < 1 ? '剛剛開始等' : `已等 ${m} 分鐘`;
+  return sec >= 120 ? `${base}。如果你已經按過同意，這一步做完地圖才會更新` : base;
+}
+setInterval(() => { const el = $('waitAge'); if (el && plan && plan.waitSince) el.textContent = waitAgeText(plan.waitSince); }, 15000);
+
 function renderBubble() {
   const b = $('bub');
   if (plan.waitingFor) {
     b.className = 'bub wait';
-    b.innerHTML = `<div class="head">${ICON.wait}等你開門</div><p>${esc(plan.waitingFor)}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
+    b.innerHTML = `<div class="head">${ICON.wait}等你開門</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
     if (!pet) $('keyBtn').addEventListener('click', () => {
       render({ ...plan, waitingFor: null, toast: null, aiSays: '收到鑰匙了！門打開，繼續前進。',
         levels: plan.levels.map(l => l.status === 'wait' ? { ...l, status: 'doing', reason: '門已打開：你交出了鑰匙' } : l) }, { quiet: true });

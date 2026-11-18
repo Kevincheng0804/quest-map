@@ -915,6 +915,74 @@ test('Cowork：沒有步驟的空清單不會壞掉；亂寫的狀態當作還�
   assert.deepEqual(shape(hub.plan()), ['甲:todo']);
 });
 
+const failed = (tool, more) => ({ hook_event_name: 'PostToolUseFailure', tool_name: tool, tool_input: {}, error: 'Exit code 2', ...more });
+
+test('工具失敗：按了同意但指令失敗，橘色解除並說「沒成功」', () => {
+  const { s } = run(prompt('a'), todos(['甲', D]), pre('Bash', { command: 'ls /nope' }), permission);
+  assert.equal(byTitle(s.plan(), '甲').status, 'wait');
+  assert.equal(s.handle(failed('Bash')), true);
+  const p = s.plan();
+  assert.equal(byTitle(p, '甲').status, 'doing');
+  assert.equal(p.waitingFor, null);
+  assert.deepEqual(p.activity, { text: '剛剛那一步沒成功', done: true });
+  assert.equal(p.aiSays, '在「甲」這關：剛剛那一步沒成功，想下一步…');
+  assert.equal(summarize(p).waiting, false);
+});
+
+test('工具失敗：被你中斷的寫「被你中斷了」；失敗的修改不算動過檔案；沒下過指令或清單類工具不理它', () => {
+  const { s } = run(prompt('a'), todos(['甲', D]));
+  s.handle(failed('Edit', { tool_input: { file_path: '/p/a.css' } }));
+  assert.equal(byTitle(s.plan(), '甲').touched, undefined, '失敗的修改不記入動過的檔案');
+  s.handle(failed('Bash', { is_interrupt: true }));
+  assert.equal(s.plan().activity.text, '剛剛被你中斷了');
+  assert.equal(s.handle(failed('TodoWrite')), false);
+  assert.equal(s.handle(failed('TaskUpdate')), false);
+  assert.equal(createSession().handle(failed('Bash')), false);
+  const before = s.plan().cup;
+  s.handle(failed('Bash'));
+  assert.equal(s.plan().cup, before, '失敗不算進水位的估算');
+});
+
+test('等了多久：開始等時記下時間，解除時清掉', () => {
+  const { s } = run(prompt('a'), todos(['甲', D]));
+  assert.equal(s.plan().waitSince, null);
+  const t0 = Date.now();
+  s.handle(permission);
+  const p = s.plan();
+  assert.ok(p.waitSince >= t0 && p.waitSince <= Date.now());
+  s.handle(post('Bash', {}));
+  assert.equal(s.plan().waitSince, null);
+  s.handle(permission);
+  assert.ok(s.plan().waitSince);
+  s.handle(failed('Bash'));
+  assert.equal(s.plan().waitSince, null, '失敗也會解除');
+});
+
+test('診斷：list() 列出地圖認得的對話，只有名稱、進度、是否在等、最後動靜，不含你說的話或指令', () => {
+  const hub = createHub();
+  hub.handle(ev('A', '/w/alpha', prompt('我的密碼是 hunter2')), 1_700_000_000_000);
+  hub.handle(ev('A', '/w/alpha', todos(['甲', C], ['乙', D])), 1_700_000_000_000);
+  hub.chatPlan(cp([['丙', D]], { goal: '聊天任務' }), 1_700_000_100_000);
+  hub.handle(ev('B', '/w/beta', permission), 1_700_000_200_000);
+  const list = hub.list();
+  assert.deepEqual(list.map(x => x.name), ['alpha', 'Cowork・聊天任務', 'beta']);
+  assert.deepEqual(list[0], { name: 'alpha', done: 1, total: 2, waiting: false, chat: false, lastAt: '2023-11-14T22:13:20.000Z' });
+  assert.equal(list[1].chat, true);
+  assert.equal(list[2].waiting, true, '收到要你同意的通知，就是在等');
+  assert.equal(list[0].waiting, false);
+  assert.ok(!/hunter2|我的密碼/.test(JSON.stringify(list)));
+});
+
+test('診斷：list() 不會用掉還沒顯示的通知', () => {
+  const hub = createHub();
+  hub.handle(ev('A', '/w/alpha', prompt('a')));
+  hub.handle(ev('A', '/w/alpha', todos(['甲', D])));
+  hub.handle(ev('A', '/w/alpha', prompt('加乙')));
+  hub.handle(ev('A', '/w/alpha', todos(['甲', D], ['乙', P])));
+  hub.list(); hub.list();
+  assert.equal(hub.plan().toast, '地圖更新！新增 1 關');
+});
+
 test('不認得的事件不會壞掉', () => {
   const s = createSession();
   assert.equal(s.handle({ hook_event_name: 'SomethingNew' }), false);

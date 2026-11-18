@@ -119,7 +119,7 @@ async function onRequest(msg) {
       return reply({
         protocolVersion: params.protocolVersion || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'quest-map', version: '0.11.1' },
+        serverInfo: { name: 'quest-map', version: '0.12.0' },
         instructions: INSTRUCTIONS
       });
     case 'ping': return reply({});

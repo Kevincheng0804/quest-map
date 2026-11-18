@@ -74,6 +74,7 @@ function createSession() {
     userSaid: '', aiSays: '我在這裡待命，去 Claude Code 下指令吧！',
     levels: [], solo: 'todo', prompted: false, waitingFor: null, waitId: null, waitPrev: null,
     project: '', seq: 0, taskSeq: 0, toast: null, labels: new Map(), prog: new Map(),
+    waitSince: null,   // 從什麼時候開始在等使用者（毫秒時間）
     chat: false,   // 來自 Cowork／聊天（沒有 hooks），進度全靠 Claude 回報
     activity: null, touched: new Map(), summary: ''   // 現在在做什麼、這次動過的檔案（依關卡）、收尾的一句話
   };
@@ -106,7 +107,7 @@ function createSession() {
     const l = S.levels.find(x => x.id === S.waitId);
     if (l && l.status === 'wait') { l.status = S.waitPrev || 'doing'; delete l.reason; if (l.keepReason) l.reason = l.keepReason; }
     if (S.solo === 'wait') S.solo = 'doing';
-    S.waitingFor = null; S.waitId = null; S.waitPrev = null;
+    S.waitingFor = null; S.waitId = null; S.waitPrev = null; S.waitSince = null;
     return true;
   }
   function setWait(text) {
@@ -116,7 +117,7 @@ function createSession() {
       S.waitId = l.id; S.waitPrev = l.status === 'todo' ? 'doing' : l.status;
       l.keepReason = l.reason; l.status = 'wait'; l.reason = '等你開門：這一步要你本人同意或回答';
     } else { S.solo = 'wait'; }
-    S.waitingFor = text;
+    S.waitingFor = text; S.waitSince = Date.now();
     S.aiSays = '這道門要你才打得開。';
   }
   function archive() {
@@ -358,6 +359,14 @@ function createSession() {
         const cleared = clearWait();
         return tick() || cleared || rec || (!!a && before !== S.activity.text);
       }
+      case 'PostToolUseFailure': {
+        // 工具失敗時 Claude Code 只發這個、不發 PostToolUse。沒處理的話，按了同意但工具失敗，橘色會一直卡著
+        if (tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate' || !S.prompted) return false;
+        const before = S.activity && S.activity.text;
+        const cleared = clearWait();
+        S.activity = { text: e.is_interrupt ? '剛剛被你中斷了' : '剛剛那一步沒成功', done: true };
+        return cleared || before !== S.activity.text;
+      }
       case 'Notification': onNotification(e); return true;
       case 'Stop': onStop(e); return true;
       default: return false;
@@ -392,7 +401,7 @@ function createSession() {
       source: S.chat ? 'chat' : 'code',
       userSaid: S.userSaid || '（還沒說話）', aiSays, activity: waiting ? null : S.activity,
       summary: complete ? S.summary : '', levels,
-      waitingFor: S.waitingFor, choice: null, toast: S.toast, project: S.project, cup: cupFill()
+      waitingFor: S.waitingFor, waitSince: S.waitingFor ? S.waitSince : null, choice: null, toast: S.toast, project: S.project, cup: cupFill()
     };
     return p;
   }
@@ -516,6 +525,11 @@ function createHub() {
       return ok;
     },
     // 使用者在清單點選；之後畫面固定顯示它，直到它結束
+    // 診斷用：地圖目前認得哪些對話（不含指令、檔案或你說的話）。peek 不會用掉通知
+    list() {
+      const nm = names();
+      return ordered().map(x => { const s = summarize(x.s.peek()); return { name: nm.get(x.id), done: s.done, total: s.total, waiting: s.waiting, chat: !!x.chat, lastAt: new Date(x.last).toISOString() }; });
+    },
     select(id) {
       if (id === null) { selected = null; return true; }
       const en = entries.get(id);
