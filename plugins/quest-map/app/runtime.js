@@ -7,6 +7,11 @@ const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
 
+// 這個程式是不是跑在雲端（Claude Code 的雲端工作階段）？雲端的 127.0.0.1 是那台虛擬機自己，連不到使用者電腦上的地圖。
+// QUEST_PET_REMOTE=1／0 可以強制（測試或特殊環境用）
+const isRemote = () => process.env.QUEST_PET_REMOTE ? process.env.QUEST_PET_REMOTE !== '0'
+  : (process.env.CLAUDE_CODE_REMOTE === 'true' || process.env.CLAUDE_CODE_ENTRYPOINT === 'remote');
+
 const PORT = () => Number(process.env.QUEST_PET_PORT) || 47600;
 const sharedDir = () => process.env.QUEST_PET_RUNTIME || path.join(os.homedir(), '.quest-map', 'runtime');
 
@@ -78,7 +83,7 @@ async function replaceIfOld({ canStart = !!findElectron(), version = myVersion()
 // 只在已經裝好元件時才啟動；不下載、不出聲。冷卻時間內不重試。
 let lastTry = 0;
 async function ensureApp({ cooldown = 60000, wait = 8000 } = {}) {
-  if (process.env.QUEST_PET_NO_AUTOLAUNCH) return false;
+  if (process.env.QUEST_PET_NO_AUTOLAUNCH || isRemote()) return false;
   if (await alive()) {
     // 開著的是舊版：換成新版（同樣受冷卻限制，不會反覆重開）
     if (Date.now() - lastTry < cooldown) return true;
@@ -98,4 +103,4 @@ async function ensureApp({ cooldown = 60000, wait = 8000 } = {}) {
   return false;
 }
 
-module.exports = { PORT, sharedDir, candidateDirs, findElectron, alive, spawnApp, ensureApp, replaceIfOld, ask, myVersion, cmpVer };
+module.exports = { PORT, sharedDir, candidateDirs, findElectron, alive, spawnApp, ensureApp, replaceIfOld, ask, myVersion, cmpVer, isRemote };

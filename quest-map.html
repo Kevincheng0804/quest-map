@@ -721,7 +721,7 @@ if (pet) {
   $('btnClose').innerHTML = ICON.cancel;
   $('btnMini').addEventListener('click', () => pet.minimize());
   $('btnClose').addEventListener('click', () => pet.close());
-  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : '等待 Claude Code 連線'; render(p); });
+  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : '等待連線（Claude Code 或 Cowork）'; render(p); });
   pet.ready();
 } else {
   demoClub = structuredClone(SCENARIOS.normal); demoShow();

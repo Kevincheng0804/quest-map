@@ -145,3 +145,22 @@ test('換新版：找不到新版的桌面元件時，不敢關掉舊的', async
   assert.equal(r, 'cannot-start');
   assert.ok(!m.calls.some(c => c.includes('/quit')), '沒有送 /quit');
 });
+
+test('isRemote：雲端的環境變數、強制開關、預設本機', () => {
+  const clear = { CLAUDE_CODE_REMOTE: undefined, CLAUDE_CODE_ENTRYPOINT: undefined, QUEST_PET_REMOTE: undefined };
+  assert.equal(withEnv({ ...clear }, () => fresh().isRemote()), false);
+  assert.equal(withEnv({ ...clear, CLAUDE_CODE_REMOTE: 'true' }, () => fresh().isRemote()), true);
+  assert.equal(withEnv({ ...clear, CLAUDE_CODE_ENTRYPOINT: 'remote' }, () => fresh().isRemote()), true);
+  assert.equal(withEnv({ ...clear, CLAUDE_CODE_ENTRYPOINT: 'cli' }, () => fresh().isRemote()), false);
+  assert.equal(withEnv({ ...clear, CLAUDE_CODE_REMOTE: 'false' }, () => fresh().isRemote()), false);
+  assert.equal(withEnv({ ...clear, CLAUDE_CODE_REMOTE: 'true', QUEST_PET_REMOTE: '0' }, () => fresh().isRemote()), false, '強制本機');
+  assert.equal(withEnv({ ...clear, QUEST_PET_REMOTE: '1' }, () => fresh().isRemote()), true, '強制雲端');
+});
+
+test('ensureApp：雲端不會去啟動或換地圖', async () => {
+  const m = await fakeMap('0.0.1');
+  const r = await withEnv({ QUEST_PET_PORT: String(m.port), CLAUDE_CODE_REMOTE: 'true', QUEST_PET_REMOTE: undefined, QUEST_PET_NO_AUTOLAUNCH: undefined }, () => fresh().ensureApp({ wait: 300, cooldown: 0 }));
+  closeFake(m);
+  assert.equal(r, false);
+  assert.equal(m.calls.length, 0, '連問版本都沒有問');
+});

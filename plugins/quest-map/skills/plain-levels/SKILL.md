@@ -1,6 +1,6 @@
 ---
 name: plain-levels
-description: 建立或修改待辦清單（TodoWrite、TaskCreate、TaskUpdate）時、動手做沒有待辦清單的小修改之前、以及每做完任務裡的一個小步驟時使用：替桌面闖關地圖的每一關補上白話名稱與小步驟，並回報做到第幾步。
+description: 建立或修改待辦清單（TodoWrite、TaskCreate、TaskUpdate）時、動手做沒有待辦清單的小修改之前、每做完任務裡的一個小步驟時，以及在 Cowork 做超過一個步驟的工作時（下載、整理檔案、寫程式、研究後產出檔案）使用：替桌面闖關地圖補上白話名稱與小步驟，並回報進度（Cowork 用 quest_plan）。單純問答、聊天、翻譯不用。
 ---
 
 # 闖關地圖：白話名稱與小步驟

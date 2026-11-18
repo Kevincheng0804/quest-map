@@ -70,8 +70,8 @@ const MAP = { pending: 'todo', in_progress: 'doing', completed: 'done', deleted:
 
 function createSession() {
   const S = {
-    round: 1, world: '等待出發', goal: '等你給 Claude Code 第一個指令', pastWorlds: [], finalGoal: '任務完成',
-    userSaid: '', aiSays: '我在這裡待命，去 Claude Code 下指令吧！',
+    round: 1, world: '等待出發', goal: '等 Claude Code 或 Cowork 開始工作', pastWorlds: [], finalGoal: '任務完成',
+    userSaid: '', aiSays: '我在待命。你電腦上的 Claude Code 有動靜，或 Cowork 開始多步驟的工作，我就會動。一般聊天和雲端的對話我看不到。',
     levels: [], solo: 'todo', prompted: false, waitingFor: null, waitId: null, waitPrev: null,
     project: '', seq: 0, taskSeq: 0, toast: null, labels: new Map(), prog: new Map(),
     waitSince: null,   // 從什麼時候開始在等使用者（毫秒時間）
@@ -376,7 +376,7 @@ function createSession() {
   function build() {
     const levels = S.levels.length ? S.levels.map(({ keepReason, ...l }) => disp(l)) : [disp({
       id: 'solo' + S.round, title: S.prompted ? '處理你的要求' : '等你出發', status: S.solo,
-      plain: S.prompted ? 'Claude 這次沒有列出步驟清單，整件事算成一關。' : '到 Claude Code 輸入指令，地圖就會開始動。',
+      plain: S.prompted ? 'Claude 這次沒有列出步驟清單，整件事算成一關。' : '在你電腦上的 Claude Code 輸入指令，地圖就會開始動。',
       tech: S.chat ? 'Cowork 任務還沒有步驟清單' : 'Claude Code 尚未建立待辦清單',
       ...(S.solo === 'wait' ? { reason: '等你開門：這一步要你本人同意或回答' } : {})
     })];

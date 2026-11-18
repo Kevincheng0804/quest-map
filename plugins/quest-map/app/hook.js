@@ -2,6 +2,9 @@
 // Claude Code hook：把事件原封不動轉給桌面上的闖關地圖。地圖沒開就安靜結束，絕不擋住 Claude Code。
 'use strict';
 const http = require('http');
+const { isRemote } = require('./runtime');
+// 雲端的工作階段連不到使用者電腦上的地圖，不用等逾時，直接結束
+if (isRemote()) process.exit(0);
 let body = '';
 const bye = () => process.exit(0);
 process.stdin.on('data', c => { body += c; }).on('end', () => {

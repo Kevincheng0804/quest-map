@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { execSync } = require('child_process');
-const { PORT, sharedDir, candidateDirs, findElectron, alive, spawnApp, replaceIfOld, myVersion } = require('./runtime');
+const { PORT, sharedDir, candidateDirs, findElectron, alive, spawnApp, replaceIfOld, myVersion, isRemote } = require('./runtime');
 
 const args = process.argv.slice(2);
 const auto = args.includes('--auto');
@@ -26,6 +26,7 @@ function post(urlPath) {
 }
 
 (async () => {
+  if (isRemote()) return say('這個對話跑在雲端，闖關地圖在你的電腦上，從這裡打不開。請在桌面版的 Claude Code 選在你的電腦上執行（不是雲端），再輸入 /quest-map:open。');
   const dirs = candidateDirs(dataArg);
   if (await alive()) {
     // 開著的是別的版本：要它自己結束，換成這個外掛的版本

@@ -22,6 +22,15 @@ function run(...events) {
 const shape = p => p.levels.map(l => `${l.title}:${l.status}`);
 const byTitle = (p, t) => p.levels.find(l => l.title === t);
 
+test('待命畫面：說清楚哪些對話看得到、哪些看不到', () => {
+  const p = createSession().plan();
+  assert.equal(p.goal, '等 Claude Code 或 Cowork 開始工作');
+  assert.match(p.aiSays, /Claude Code/);
+  assert.match(p.aiSays, /Cowork/);
+  assert.match(p.aiSays, /一般聊天和雲端的對話我看不到/);
+  assert.match(p.levels[0].plain, /在你電腦上的 Claude Code/);
+});
+
 test('還沒下指令：一關待命、機器人在休息', () => {
   const p = createSession().plan();
   assert.equal(p.levels.length, 1);

@@ -9,7 +9,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const SERVER = path.join(__dirname, '..', 'mcp-server.js');
-delete process.env.CLAUDE_PROJECT_DIR; delete process.env.QUEST_PET_CHAT;
+delete process.env.CLAUDE_PROJECT_DIR; delete process.env.QUEST_PET_CHAT; delete process.env.CLAUDE_CODE_REMOTE; delete process.env.CLAUDE_CODE_ENTRYPOINT; delete process.env.QUEST_PET_REMOTE;
 
 function fakeMap() {
   const got = [];
@@ -23,7 +23,7 @@ function fakeMap() {
 // 啟動伺服器、送出請求，收齊回覆後關掉
 function talk(env, requests, waitMs = 1500) {
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [SERVER], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'ignore'] });
+    const child = spawn(process.execPath, [SERVER], { env: { ...process.env, CLAUDE_CODE_REMOTE: '', CLAUDE_CODE_ENTRYPOINT: '', QUEST_PET_REMOTE: '', ...env }, stdio: ['pipe', 'pipe', 'ignore'] });
     const replies = []; let buf = '';
     child.stdout.on('data', c => { buf += c; let i; while ((i = buf.indexOf('\n')) >= 0) { replies.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
     for (const r of requests) child.stdin.write(JSON.stringify(r) + '\n');
@@ -145,6 +145,74 @@ test('MCP：quest_plan 缺少 goal 或 steps 時回報錯誤', async () => {
   const replies = await talk({ QUEST_PET_NO_AUTOLAUNCH: '1', QUEST_PET_PORT: '1' }, [init, call(2, 'quest_plan', { goal: 'x' }), call(3, 'quest_plan', { steps: [] })]);
   assert.equal(replies.find(r => r.id === 2).result.isError, true);
   assert.equal(replies.find(r => r.id === 3).result.isError, true);
+});
+
+const HOOK = path.join(__dirname, '..', 'hook.js');
+const REMOTE_ENVS = [{ CLAUDE_CODE_REMOTE: 'true' }, { CLAUDE_CODE_ENTRYPOINT: 'remote' }];
+
+test('雲端：說明改成短版，叫 Claude 不要呼叫地圖的工具', async () => {
+  for (const remote of REMOTE_ENVS) {
+    const replies = await talk({ QUEST_PET_PORT: '1', ...remote }, [init], 700);
+    const ins = replies.find(r => r.id === 1).result.instructions;
+    assert.match(ins, /跑在雲端/);
+    assert.match(ins, /請不要呼叫/);
+    assert.doesNotMatch(ins, /沒有待辦清單的小修改也要補/);
+  }
+});
+
+test('雲端：四個工具都只回「在雲端」，完全不對地圖連線（也不會去啟動地圖）', async () => {
+  const map = await fakeMap();
+  const replies = await talk({ QUEST_PET_PORT: String(map.port), CLAUDE_CODE_REMOTE: 'true', CLAUDE_PROJECT_DIR: '/cloud/proj' }, [
+    init,
+    call(2, 'describe_quest', { levels: [{ task: '1', title: 'x', plain: 'y' }] }),
+    call(3, 'quest_progress', { done: 1 }),
+    call(4, 'quest_plan', { goal: 'g', steps: [{ title: '甲', status: 'pending' }] }),
+    call(5, 'quest_ping')
+  ]);
+  map.server.close();
+  for (const id of [2, 3, 4]) {
+    const r = replies.find(x => x.id === id).result;
+    assert.ok(!r.isError);
+    assert.match(textOf({ result: r }), /這個對話跑在雲端.*不用再呼叫/s);
+  }
+  assert.match(textOf(replies.find(x => x.id === 5)), /連線測試：失敗，這個對話跑在雲端/);
+  assert.equal(map.got.length, 0, '假地圖沒有收到任何請求');
+});
+
+test('雲端：QUEST_PET_REMOTE=0 可以強制當成本機（測試或特殊環境）', async () => {
+  const map = await fakeMap();
+  const replies = await talk({ QUEST_PET_NO_AUTOLAUNCH: '1', QUEST_PET_PORT: String(map.port), CLAUDE_CODE_REMOTE: 'true', QUEST_PET_REMOTE: '0' }, [init, call(2, 'quest_ping')]);
+  map.server.close();
+  assert.match(textOf(replies.find(r => r.id === 2)), /連線測試：成功/);
+  assert.doesNotMatch(replies.find(r => r.id === 1).result.instructions, /跑在雲端/);
+});
+
+// 把 hook 當成真的子程序跑：stdin 給它一筆事件，看假地圖有沒有收到
+function runHook(env, ms = 700) {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [HOOK], { env: { ...process.env, CLAUDE_CODE_REMOTE: '', CLAUDE_CODE_ENTRYPOINT: '', QUEST_PET_REMOTE: '', ...env }, stdio: ['pipe', 'ignore', 'ignore'] });
+    const t0 = Date.now();
+    child.on('exit', code => resolve({ code, ms: Date.now() - t0 }));
+    child.stdin.write(JSON.stringify({ session_id: 's', hook_event_name: 'Stop' }));
+    child.stdin.end();
+    setTimeout(() => { child.kill(); }, ms + 1500);
+  });
+}
+
+test('hook：本機會把事件送給地圖；雲端立刻結束、不連線', async () => {
+  const map = await fakeMap();
+  const local = await runHook({ QUEST_PET_PORT: String(map.port), CLAUDE_PROJECT_DIR: '/p' });
+  assert.equal(local.code, 0);
+  const sent = map.got.find(g => g.url === '/hook');
+  assert.ok(sent, '本機送出了 /hook');
+  assert.equal(sent.body.hook_event_name, 'Stop');
+  assert.equal(sent.body.project_dir, '/p');
+  const before = map.got.length;
+  const cloud = await runHook({ QUEST_PET_PORT: String(map.port), CLAUDE_CODE_REMOTE: 'true' });
+  await new Promise(r => setTimeout(r, 200));
+  map.server.close();
+  assert.equal(cloud.code, 0);
+  assert.equal(map.got.length, before, '雲端沒有送任何請求');
 });
 
 test('MCP：地圖沒開時，描述工具回報「沒開」但不是錯誤', async () => {
