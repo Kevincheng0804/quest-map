@@ -3,6 +3,179 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+'use strict';
+// 介面文字的多語言。Node（state.js、main.js）和瀏覽器（地圖、小把手）共用同一份。
+// 加新語言：在 MESSAGES 加一份同樣鍵名的物件，再把語言代碼放進 LANGS 就好；缺的鍵會退回繁體中文。
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.QuestI18n = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  const LANGS = [{ code: 'zh-TW', label: '繁體中文' }, { code: 'en', label: 'English' }];
+  const DEFAULT = 'zh-TW';
+
+  const MESSAGES = {
+    'zh-TW': {
+      // ---- 狀態與通用 ----
+      'status.todo': '未開始', 'status.doing': '進行中', 'status.wait': '等你開門', 'status.done': '已通關', 'status.adjust': '施工中', 'status.cancel': '已拆除',
+      'sep': '、', 'sep.toast': '，',
+      'prompt.sched': '排程任務：{name}', 'prompt.system': '（系統訊息）', 'said.none': '（還沒說話）',
+      // ---- 現在在做什麼 ----
+      'act.test': '正在跑測試', 'act.test.done': '測試跑完了',
+      'act.install': '正在安裝套件', 'act.install.done': '套件裝好了',
+      'act.commit': '正在儲存版本紀錄', 'act.commit.done': '版本紀錄存好了',
+      'act.push': '正在上傳到遠端', 'act.push.done': '上傳完了',
+      'act.serve': '正在啟動預覽', 'act.serve.done': '預覽啟動了',
+      'act.build': '正在建置專案', 'act.build.done': '建置完了',
+      'act.cmd': '正在跑指令', 'act.cmd.done': '指令跑完了',
+      'act.read': '正在看 {f}', 'act.read.done': '看完了 {f}', 'act.read0': '正在看檔案', 'act.read0.done': '看完了檔案',
+      'act.edit': '正在修改 {f}', 'act.edit.done': '改好了 {f}', 'act.edit0': '正在修改檔案', 'act.edit0.done': '改好了檔案',
+      'act.write': '正在寫入 {f}', 'act.write.done': '寫好了 {f}', 'act.write0': '正在寫入檔案', 'act.write0.done': '寫好了檔案',
+      'act.search': '正在搜尋檔案', 'act.search.done': '搜尋完了',
+      'act.web': '正在上網查資料', 'act.web.done': '查完資料了',
+      'act.agent': '請助手幫忙', 'act.agent.done': '助手回報了',
+      'act.interrupted': '剛剛被你中斷了', 'act.failed': '剛剛那一步沒成功',
+      'touch.edit': '改了', 'touch.write': '寫入',
+      'now.doing': '{text}…', 'now.done': '{text}，想下一步…', 'says.inLevel': '在「{label}」這關：{now}',
+      // ---- 世界與關卡 ----
+      'world.idle': '等待出發', 'goal.idle': '等 Claude Code 或 Cowork 開始工作', 'final.default': '任務完成',
+      'says.idle': '我在待命。你電腦上的 Claude Code 有動靜，或 Cowork 開始多步驟的工作，我就會動。一般聊天和雲端的對話我看不到。',
+      'world.round': '第 {n} 輪', 'step.n': '第 {n} 步', 'step.item': '步驟 {n}',
+      'step.at': '（第 {i}/{n} 步：{name}）',
+      'level.solo': '處理你的要求', 'level.start': '等你出發',
+      'solo.plain': 'Claude 這次沒有列出步驟清單，整件事算成一關。', 'solo.plain0': '在你電腦上的 Claude Code 輸入指令，地圖就會開始動。',
+      'tech.chat0': 'Cowork 任務還沒有步驟清單', 'tech.code0': 'Claude Code 尚未建立待辦清單',
+      'tech.chat': 'Cowork 進度清單：{title}', 'tech.code': 'Claude Code 待辦：{title}', 'tech.task': 'Claude Code 任務 #{id}：{title}',
+      'quote.chat': 'Claude 調整了計畫', 'quote.said': '因為你說「{said}」', 'quote.plain': '計畫調整',
+      'reason.wait': '等你開門：這一步要你本人同意或回答',
+      'reason.new': '新關卡：{quote}', 'reason.rework': '回頭修：{quote}', 'reason.cancel': '已拆除：{quote}',
+      'says.door': '這道門要你才打得開。',
+      'says.rework': '我走回「{name}」這關重新修一下。{at}', 'says.fight': '我正在打「{name}」這關{at}，打完就往下一關！',
+      'says.working': '我正在處理「{name}」{at}', 'says.worldDone': '這個世界的關卡全部通關！',
+      'says.heard': '聽到了！我看看路線要不要改。', 'says.received': '收到！我先看看這趟要怎麼走。',
+      'says.waitNext': '我在等你的下一句話。',
+      'says.doneSolo': '完成：{summary}', 'says.doneSolo0': '做完了！等你的下一個指令。',
+      'says.worldAll': '這個世界全部通關！{summary}', 'says.worldAll0': '這個世界全部通關！等你的下一個指令。',
+      'says.stopped': '我先停在這裡，回 Claude Code 看看我說了什麼。',
+      'says.taskDone': '這個任務全部完成！{summary}', 'says.taskDone0': '這個任務全部完成！',
+      'toast.prefix': '地圖更新！', 'toast.added': '新增 {n} 關', 'toast.cancelled': '拆掉 {n} 關', 'toast.rework': '{n} 關要回頭修',
+      // ---- 等你 ----
+      'wait.tool': 'Claude 想使用「{tool}」，需要你按同意。請回到 Claude Code 視窗。', 'wait.msg': '請回到 Claude Code 視窗回覆：{msg}',
+      'wait.asked': 'Claude 問了你一個問題，請回到 Claude Code 視窗回覆。', 'wait.default': '需要你回覆',
+      // ---- 對話名稱 ----
+      'name.scratch': '未選資料夾的對話', 'name.chat': '對話',
+      // ---- 地圖畫面 ----
+      'ui.title': 'AI 任務闖關地圖', 'ui.close': '關閉闖關地圖', 'ui.mini': '縮到旁邊', 'ui.lang': '語言', 'ui.langAuto': '自動（跟系統）',
+      'ui.where': '目前位置', 'ui.progress': '本世界進度', 'ui.levelCount': '關卡', 'ui.doneCount': '已通關 {n} 關',
+      'ui.said': '你剛剛說', 'ui.task': '這次的任務', 'ui.quote': '「{s}」', 'ui.goal': '這一輪的目標：{goal}',
+      'ui.world': '世界 {n}・{name}', 'ui.worldLabel': '世界 {n}：{name}，已通過。看這一輪做了什麼', 'ui.worldPassed': '世界 {n}・{name}　已通過',
+      'ui.before': '前面 {n} 關已走過', 'ui.after': '後面還有 {n} 關',
+      'ui.levelAria': '關卡 {num}：{title}，狀態：{status}', 'ui.levelAria0': '{title}，狀態：{status}',
+      'ui.tagNew': '新關卡', 'ui.tagSign': '回頭修', 'ui.tagPause': '暫停',
+      'ui.locked': '未解鎖', 'ui.finished': '已完成',
+      'ui.waitHead': '等你開門', 'ui.waitJust': '剛剛開始等', 'ui.waitMin': '已等 {m} 分鐘',
+      'ui.waitLong': '{base}。如果你已經按過同意，這一步做完地圖才會更新',
+      'ui.nowJust': '剛剛', 'ui.nowNow': '現在', 'ui.nowLine': '{when}：{text}', 'ui.touched': '這次動過的檔案', 'ui.moreFiles': '還有 {n} 個', 'ui.fileLine': '{verb} {name}',
+      'ui.cardNum': '關卡 {n}', 'ui.offRoad': '已移出主路', 'ui.whyWait': '要請你做的事', 'ui.whyChanged': '為什麼變了', 'ui.tech': '技術細節',
+      'ui.sessions': '對話（{n}）', 'ui.sWaiting': '等你', 'ui.sAriaWait': '在等你', 'ui.sAriaProg': '已通關 {done} / {total}', 'ui.sAria': '{name}，{state}，點一下切換',
+      'ui.connecting': '等待連線（Claude Code 或 Cowork）',
+      // ---- 小把手與通知 ----
+      'bat.open': '展開闖關地圖', 'bat.waitName': '等你 · {name}', 'bat.wait': '等你',
+      'bat.ariaWaitName': '{name} 的 Claude 在等你。', 'bat.ariaWait': 'Claude 在等你。', 'bat.ariaProg': '已倒滿 {done} 杯，共 {total} 個任務。點一下展開闖關地圖，按住可以拖到別的位置',
+      'bat.title': '已完成 {done} / {total} 個任務', 'bat.titleWait': 'Claude 在等你',
+      'notif.title': 'Claude Code 在等你', 'notif.titleName': 'Claude Code 在等你・{name}', 'notif.body': '有一關需要你出手',
+      'notif.ping': '闖關地圖：收到連線測試', 'notif.pingBody': '來自 {host}（{platform}）', 'notif.unknown': '未知',
+      'win.map': 'AI 任務闖關地圖', 'win.bat': '闖關進度', 'win.edge': '邊緣水位'
+    },
+    en: {
+      'status.todo': 'Not started', 'status.doing': 'In progress', 'status.wait': 'Waiting for you', 'status.done': 'Cleared', 'status.adjust': 'Reworking', 'status.cancel': 'Removed',
+      'sep': ', ', 'sep.toast': ', ',
+      'prompt.sched': 'Scheduled task: {name}', 'prompt.system': '(system message)', 'said.none': '(nothing said yet)',
+      'act.test': 'Running tests', 'act.test.done': 'Tests finished',
+      'act.install': 'Installing packages', 'act.install.done': 'Packages installed',
+      'act.commit': 'Saving a version', 'act.commit.done': 'Version saved',
+      'act.push': 'Uploading to remote', 'act.push.done': 'Upload finished',
+      'act.serve': 'Starting a preview', 'act.serve.done': 'Preview started',
+      'act.build': 'Building the project', 'act.build.done': 'Build finished',
+      'act.cmd': 'Running a command', 'act.cmd.done': 'Command finished',
+      'act.read': 'Reading {f}', 'act.read.done': 'Read {f}', 'act.read0': 'Reading a file', 'act.read0.done': 'Read a file',
+      'act.edit': 'Editing {f}', 'act.edit.done': 'Edited {f}', 'act.edit0': 'Editing a file', 'act.edit0.done': 'Edited a file',
+      'act.write': 'Writing {f}', 'act.write.done': 'Wrote {f}', 'act.write0': 'Writing a file', 'act.write0.done': 'Wrote a file',
+      'act.search': 'Searching files', 'act.search.done': 'Search finished',
+      'act.web': 'Looking things up online', 'act.web.done': 'Finished looking things up',
+      'act.agent': 'Asking a helper', 'act.agent.done': 'Helper reported back',
+      'act.interrupted': 'You interrupted that step', 'act.failed': 'That step did not succeed',
+      'touch.edit': 'Edited', 'touch.write': 'Wrote',
+      'now.doing': '{text}…', 'now.done': '{text}, thinking about the next step…', 'says.inLevel': 'On "{label}": {now}',
+      'world.idle': 'Waiting to start', 'goal.idle': 'Waiting for Claude Code or Cowork to start working', 'final.default': 'Task complete',
+      'says.idle': "I'm on standby. I'll move when Claude Code on your computer does something, or when Cowork starts a multi-step job. I can't see regular chats or cloud conversations.",
+      'world.round': 'Round {n}', 'step.n': 'Step {n}', 'step.item': 'Step {n}',
+      'step.at': ' (step {i}/{n}: {name})',
+      'level.solo': 'Handle your request', 'level.start': 'Waiting to start',
+      'solo.plain': "Claude didn't list steps this time, so the whole job counts as one level.", 'solo.plain0': 'Type a command in Claude Code on your computer and the map will start moving.',
+      'tech.chat0': 'This Cowork task has no step list yet', 'tech.code0': 'Claude Code has not created a to-do list yet',
+      'tech.chat': 'Cowork progress list: {title}', 'tech.code': 'Claude Code to-do: {title}', 'tech.task': 'Claude Code task #{id}: {title}',
+      'quote.chat': 'Claude adjusted the plan', 'quote.said': 'Because you said "{said}"', 'quote.plain': 'Plan adjusted',
+      'reason.wait': 'Waiting for you: this step needs your own approval or answer',
+      'reason.new': 'New level: {quote}', 'reason.rework': 'Reworking: {quote}', 'reason.cancel': 'Removed: {quote}',
+      'says.door': 'Only you can open this door.',
+      'says.rework': 'Going back to "{name}" to fix it up.{at}', 'says.fight': 'Working on "{name}"{at}, then on to the next level!',
+      'says.working': 'Working on "{name}"{at}', 'says.worldDone': 'Every level in this world is cleared!',
+      'says.heard': 'Got it! Let me see if the route needs to change.', 'says.received': "Got it! I'll look at how to get there first.",
+      'says.waitNext': "I'm waiting for your next message.",
+      'says.doneSolo': 'Done: {summary}', 'says.doneSolo0': "All done! Waiting for your next instruction.",
+      'says.worldAll': 'Every level in this world is cleared! {summary}', 'says.worldAll0': 'Every level in this world is cleared! Waiting for your next instruction.',
+      'says.stopped': "I've paused here. Go back to Claude Code to see what I said.",
+      'says.taskDone': 'This task is complete! {summary}', 'says.taskDone0': 'This task is complete!',
+      'toast.prefix': 'Map updated! ', 'toast.added': '{n} new', 'toast.cancelled': '{n} removed', 'toast.rework': '{n} to rework',
+      'wait.tool': 'Claude wants to use "{tool}" and needs your approval. Please go back to the Claude Code window.', 'wait.msg': 'Please go back to the Claude Code window and reply: {msg}',
+      'wait.asked': 'Claude asked you a question. Please go back to the Claude Code window and reply.', 'wait.default': 'Needs your reply',
+      'name.scratch': 'Chat without a folder', 'name.chat': 'Chat',
+      'ui.title': 'AI Quest Map', 'ui.close': 'Close the quest map', 'ui.mini': 'Dock to edge', 'ui.lang': 'Language', 'ui.langAuto': 'Auto (system)',
+      'ui.where': 'Current location', 'ui.progress': 'Progress in this world', 'ui.levelCount': 'Level', 'ui.doneCount': '{n} cleared',
+      'ui.said': 'You just said', 'ui.task': 'This task', 'ui.quote': '"{s}"', 'ui.goal': "This round's goal: {goal}",
+      'ui.world': 'World {n} · {name}', 'ui.worldLabel': 'World {n}: {name}, cleared. See what was done in this round', 'ui.worldPassed': 'World {n} · {name}  cleared',
+      'ui.before': '{n} earlier cleared', 'ui.after': '{n} more ahead',
+      'ui.levelAria': 'Level {num}: {title}, status: {status}', 'ui.levelAria0': '{title}, status: {status}',
+      'ui.tagNew': 'New', 'ui.tagSign': 'Rework', 'ui.tagPause': 'Paused',
+      'ui.locked': 'Locked', 'ui.finished': 'Complete',
+      'ui.waitHead': 'Waiting for you', 'ui.waitJust': 'Just started waiting', 'ui.waitMin': 'Waiting {m} min',
+      'ui.waitLong': "{base}. If you've already approved, the map will update once this step finishes",
+      'ui.nowJust': 'Just now', 'ui.nowNow': 'Now', 'ui.nowLine': '{when}: {text}', 'ui.touched': 'Files touched this time', 'ui.moreFiles': '{n} more', 'ui.fileLine': '{verb} {name}',
+      'ui.cardNum': 'Level {n}', 'ui.offRoad': 'Off the main road', 'ui.whyWait': 'What you need to do', 'ui.whyChanged': 'Why it changed', 'ui.tech': 'Technical details',
+      'ui.sessions': 'Chats ({n})', 'ui.sWaiting': 'Waiting', 'ui.sAriaWait': 'waiting for you', 'ui.sAriaProg': '{done} / {total} cleared', 'ui.sAria': '{name}, {state}, click to switch',
+      'ui.connecting': 'Waiting to connect (Claude Code or Cowork)',
+      'bat.open': 'Open the quest map', 'bat.waitName': 'Waiting · {name}', 'bat.wait': 'Waiting',
+      'bat.ariaWaitName': "Claude in {name} is waiting for you. ", 'bat.ariaWait': 'Claude is waiting for you. ', 'bat.ariaProg': '{done} of {total} tasks filled. Click to open the quest map, hold to drag it elsewhere.',
+      'bat.title': '{done} / {total} tasks done', 'bat.titleWait': 'Claude is waiting for you',
+      'notif.title': 'Claude Code is waiting for you', 'notif.titleName': 'Claude Code is waiting for you · {name}', 'notif.body': 'A level needs your attention',
+      'notif.ping': 'Quest Map: connection test received', 'notif.pingBody': 'From {host} ({platform})', 'notif.unknown': 'unknown',
+      'win.map': 'AI Quest Map', 'win.bat': 'Quest progress', 'win.edge': 'Edge water level'
+    }
+  };
+
+  let current = DEFAULT;
+  // 系統語言 → 支援的語言。中文一律用繁體，其他一律英文
+  function detect(locale) {
+    const l = String(locale || '').toLowerCase();
+    return l.startsWith('zh') ? 'zh-TW' : 'en';
+  }
+  const valid = code => LANGS.some(x => x.code === code);
+  function setLang(code) { current = valid(code) ? code : DEFAULT; return current; }
+  const getLang = () => current;
+  // 取文字：缺的鍵退回繁體中文；{name} 換成參數
+  function t(key, params, lang) {
+    const dict = MESSAGES[lang || current] || {};
+    let s = dict[key];
+    if (s == null) s = MESSAGES[DEFAULT][key];
+    if (s == null) return key;
+    return params ? s.replace(/\{(\w+)\}/g, (m, k) => (params[k] == null ? m : params[k])) : s;
+  }
+  // 同一個鍵在所有語言的樣子（比對「這是不是預設文字」用，不受語言切換影響）
+  const all = key => Object.keys(MESSAGES).map(l => MESSAGES[l][key]).filter(x => x != null);
+  return { LANGS, DEFAULT, MESSAGES, detect, valid, setLang, getLang, t, all };
+});
+</script>
 </head>
 <body style="margin:0">
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -229,6 +402,7 @@ html.live body { padding: 0; background: var(--sea); }
 html.live .fit { border-radius: 0; box-shadow: none; }
 html.live .demo { -webkit-app-region: drag; }
 html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 8px; }
+#langSel { height: 36px; border-radius: 18px; border: 1.5px solid var(--todo-edge); background: #fff; font-size: 13px; font-weight: 600; padding: 0 10px; color: var(--ink); }
 .demo button.win svg { width: 18px; height: 18px; }
 .demo button#btnClose { width: 44px; padding: 0; justify-content: center; }
 
@@ -244,7 +418,7 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
 <div class="stage" id="stage">
 
   <div class="demo">
-    <div class="demo-title">AI 任務闖關地圖 <small id="subTitle">範例任務：做一個社團報名網站</small></div>
+    <div class="demo-title"><span data-i18n="ui.title">AI 任務闖關地圖</span> <small id="subTitle">範例任務：做一個社團報名網站</small></div>
     <span class="demo-label demo-only">示範情境</span>
     <button type="button" class="demo-only" data-sc="normal" aria-pressed="true">正常進行</button>
     <button type="button" class="demo-only" data-sc="wait" aria-pressed="false">等你操作</button>
@@ -253,8 +427,9 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
     <button type="button" class="demo-only" data-sc="small" aria-pressed="false">小修改</button>
     <button type="button" class="demo-only" data-sc="finish" aria-pressed="false">全部完成</button>
     <button type="button" class="demo-only" data-sc="change" aria-pressed="false">改變心意</button>
+    <select id="langSel" data-i18n-aria="ui.lang"></select>
     <button type="button" class="win live-only" id="btnMini"></button>
-    <button type="button" class="win live-only" id="btnClose" aria-label="關閉闖關地圖"></button>
+    <button type="button" class="win live-only" id="btnClose" data-i18n-aria="ui.close" aria-label="關閉闖關地圖"></button>
   </div>
 
   <svg class="map" viewBox="0 0 1440 900" aria-hidden="true">
@@ -313,11 +488,11 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
   <div id="worldpop" hidden></div>
 
   <div class="hud" id="where">
-    <div class="eyebrow">目前位置</div>
+    <div class="eyebrow" data-i18n="ui.where">目前位置</div>
     <h1 id="whereName"></h1>
     <div class="goal" id="whereGoal"></div>
-    <div class="bar" role="progressbar" aria-label="本世界進度" aria-valuemin="0" id="barBox"><i id="barFill"></i></div>
-    <div class="count"><span>關卡 <b id="cntNow"></b></span><span id="cntDone"></span></div>
+    <div class="bar" role="progressbar" data-i18n-aria="ui.progress" aria-label="本世界進度" aria-valuemin="0" id="barBox"><i id="barFill"></i></div>
+    <div class="count"><span><span data-i18n="ui.levelCount">關卡</span> <b id="cntNow"></b></span><span id="cntDone"></span></div>
   </div>
   <div class="hud" id="sessions" hidden></div>
   <div class="hud" id="said"><div class="eyebrow" id="saidLabel">你剛剛說</div><p id="saidText"></p></div>
@@ -341,9 +516,25 @@ const ICON = {
   flag: svg('<path d="M6 21V4"/><path d="M6 5h11l-2.5 4L17 13H6" fill="currentColor"/>'),
   bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>')
 };
-const STATUS = { todo: '未開始', doing: '進行中', wait: '等你開門', done: '已通關', adjust: '施工中', cancel: '已拆除' };
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const I = window.QuestI18n;
 const pet = window.questPet || null;   // 桌面寵物模式才有
+// 語言：桌面程式由主程式決定（預設跟系統）；單獨開網頁時看瀏覽器語言，選過的記在 localStorage
+const store = { get() { try { return localStorage.getItem('questLang'); } catch { return null; } }, set(v) { try { localStorage.setItem('questLang', v); } catch { /* 存不了就算了 */ } } };
+let langSetting = pet ? pet.lang.setting : (store.get() || 'auto');
+let LANG = pet ? pet.lang.lang : (I.valid(langSetting) ? langSetting : I.detect(navigator.language));
+const T = (k, p) => I.t(k, p, LANG);
+const STATUS = new Proxy({}, { get: (_o, k) => T('status.' + String(k)) });
+function applyStatic() {
+  document.documentElement.lang = LANG === 'en' ? 'en' : 'zh-Hant';
+  document.title = T('ui.title');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = T(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', T(el.dataset.i18nAria)));
+  const sel = $('langSel');
+  sel.innerHTML = `<option value="auto">${esc(T('ui.langAuto'))}</option>` + I.LANGS.map(l => `<option value="${l.code}">${esc(l.label)}</option>`).join('');
+  sel.value = langSetting;
+  $('btnMini').innerHTML = svg('<path d="M4 12h12M11 7l5 5-5 5M20 4v16"/>') + esc(T('ui.mini'));
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const MAXV = 7;                         // 地圖上最多同時畫幾關，其餘收起來
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -485,7 +676,7 @@ function windowed(p, robotAt) {
   });
   return { levels, before: start, after: act.length - start - MAXV };
 }
-const signText = (p, l) => (p.choice && robotLevel(p) === l) ? '暫停' : '回頭修';
+const signText = (p, l) => (p.choice && robotLevel(p) === l) ? T('ui.tagPause') : T('ui.tagSign');
 
 function render(next, opts = {}) {
   prev = plan; plan = next;
@@ -498,8 +689,8 @@ function render(next, opts = {}) {
   const viewActive = view.levels.filter(l => l.status !== 'cancel');
   if (opts.resetSelection || !view.levels.some(l => l.id === selected)) follow = true;
   if (follow) selected = robotAt.id;
-  $('moreBefore').hidden = !view.before; $('moreBefore').textContent = `前面 ${view.before} 關已走過`;
-  $('moreAfter').hidden = !view.after; $('moreAfter').textContent = `後面還有 ${view.after} 關`;
+  $('moreBefore').hidden = !view.before; $('moreBefore').textContent = T('ui.before', { n: view.before });
+  $('moreAfter').hidden = !view.after; $('moreAfter').textContent = T('ui.after', { n: view.after });
 
   // 比對新舊計畫
   const old = new Map((prev ? prev.levels : []).map(l => [l.id, l]));
@@ -528,9 +719,9 @@ function render(next, opts = {}) {
     } else { el.classList.remove('pop'); }
     const num = active.indexOf(l) + 1;
     el.className = `level ${l.status}${el.classList.contains('pop') ? ' pop' : ''}`;
-    el.setAttribute('aria-label', `${num ? '關卡 ' + num + '：' : ''}${l.title}，狀態：${STATUS[l.status]}`);
+    el.setAttribute('aria-label', (num ? T('ui.levelAria', { num, title: l.title, status: STATUS[l.status] }) : T('ui.levelAria0', { title: l.title, status: STATUS[l.status] })));
     const low = viewActive.indexOf(l) % 2 === 0 ? ' low' : '';   // 位置偏低的關卡，牌子掛下面才不會擋到鄰居
-    const tag = l.status === 'adjust' ? `<span class="tag sign${low}">${signText(plan, l)}</span>` : l.isNew ? `<span class="tag new${low}">新關卡</span>` : '';
+    const tag = l.status === 'adjust' ? `<span class="tag sign${low}">${signText(plan, l)}</span>` : l.isNew ? `<span class="tag new${low}">${esc(T('ui.tagNew'))}</span>` : '';
     const face = (l.status === 'todo' || l.status === 'doing') ? num : ICON[l.status];
     el.firstChild.innerHTML = `${tag}<span class="disc">${face}</span><span class="name">${esc(l.title)}</span>`;
     requestAnimationFrame(() => put(el, pos[l.id]));
@@ -549,7 +740,7 @@ function render(next, opts = {}) {
   $('islandFinal').classList.toggle('on', complete);
   document.querySelectorAll('.cloud').forEach(c => c.classList.toggle('gone', complete));
   document.querySelector('.final').classList.toggle('on', complete);
-  $('finalLock').innerHTML = complete ? ICON.flag + '已完成' : ICON.wait + '未解鎖';
+  $('finalLock').innerHTML = complete ? ICON.flag + esc(T('ui.finished')) : ICON.wait + esc(T('ui.locked'));
   renderBubble();
   $('robot').className = (complete ? 'far ' : '') + (active.some(l => l.status === 'wait') ? 'wait'
     : active.length && active.every(l => l.status === 'done') ? 'happy'
@@ -578,15 +769,15 @@ function render(next, opts = {}) {
   // 固定資訊
   const done = active.filter(l => l.status === 'done').length;
   const at = Math.max(active.indexOf(robotAt), 0) + 1;
-  $('whereName').textContent = `世界 ${plan.round}・${plan.world}`;
-  $('whereGoal').textContent = `這一輪的目標：${plan.goal}`;
+  $('whereName').textContent = T('ui.world', { n: plan.round, name: plan.world });
+  $('whereGoal').textContent = T('ui.goal', { goal: plan.goal });
   $('barFill').style.width = (active.length ? done / active.length * 100 : 0) + '%';
   $('barBox').setAttribute('aria-valuemax', active.length);
   $('barBox').setAttribute('aria-valuenow', done);
   $('cntNow').textContent = `${at} / ${active.length}`;
-  $('cntDone').textContent = `已通關 ${done} 關`;
-  $('saidLabel').textContent = plan.source === 'chat' ? '這次的任務' : '你剛剛說';
-  $('saidText').textContent = `「${plan.userSaid}」`;
+  $('cntDone').textContent = T('ui.doneCount', { n: done });
+  $('saidLabel').textContent = plan.source === 'chat' ? T('ui.task') : T('ui.said');
+  $('saidText').textContent = T('ui.quote', { s: plan.userSaid });
   $('finalName').textContent = plan.finalGoal;
   renderWorlds();
   renderSessions(plan);
@@ -595,7 +786,7 @@ function render(next, opts = {}) {
   // 只有結構改變才通知
   let msg = plan.toast;
   if (msg === undefined && (diff.added || diff.cancelled || diff.rework)) {
-    msg = '地圖更新！' + [diff.added && `新增 ${diff.added} 關`, diff.cancelled && `拆掉 ${diff.cancelled} 關`, diff.rework && `${diff.rework} 關要回頭修`].filter(Boolean).join('，');
+    msg = T('toast.prefix') + [diff.added && T('toast.added', { n: diff.added }), diff.cancelled && T('toast.cancelled', { n: diff.cancelled }), diff.rework && T('toast.rework', { n: diff.rework })].filter(Boolean).join(T('sep.toast'));
   }
   if (msg && !opts.quiet) showToast(msg); else hideToast();
 }
@@ -606,8 +797,8 @@ function markSelected() { els.forEach((el, id) => el.classList.toggle('sel', id 
 function waitAgeText(since) {
   if (!since) return '';
   const sec = Math.max(0, Math.floor((Date.now() - since) / 1000)), m = Math.floor(sec / 60);
-  const base = m < 1 ? '剛剛開始等' : `已等 ${m} 分鐘`;
-  return sec >= 120 ? `${base}。如果你已經按過同意，這一步做完地圖才會更新` : base;
+  const base = m < 1 ? T('ui.waitJust') : T('ui.waitMin', { m });
+  return sec >= 120 ? T('ui.waitLong', { base }) : base;
 }
 setInterval(() => { const el = $('waitAge'); if (el && plan && plan.waitSince) el.textContent = waitAgeText(plan.waitSince); }, 15000);
 
@@ -615,7 +806,7 @@ function renderBubble() {
   const b = $('bub');
   if (plan.waitingFor) {
     b.className = 'bub wait';
-    b.innerHTML = `<div class="head">${ICON.wait}等你開門</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
+    b.innerHTML = `<div class="head">${ICON.wait}${esc(T('ui.waitHead'))}</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
     if (!pet) $('keyBtn').addEventListener('click', () => {
       render({ ...plan, waitingFor: null, toast: null, aiSays: '收到鑰匙了！門打開，繼續前進。',
         levels: plan.levels.map(l => l.status === 'wait' ? { ...l, status: 'doing', reason: '門已打開：你交出了鑰匙' } : l) }, { quiet: true });
@@ -644,17 +835,17 @@ function renderCard() {
   const num = plan.levels.filter(x => x.status !== 'cancel').indexOf(l) + 1;
   const working = (l.status === 'doing' || l.status === 'adjust') && plan.activity;
   const tl = l.touched || [];
-  const nowHtml = working ? `<p class="now">${ICON.doing}<span>${plan.activity.done ? '剛剛' : '現在'}：${esc(plan.activity.text)}</span></p>` : '';
-  const touchedHtml = tl.length ? `<div class="tlabel">這次動過的檔案</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(t.verb)} ${esc(t.name)}</span></li>`).join('')}${tl.length > 6 ? `<li><span>還有 ${tl.length - 6} 個</span></li>` : ''}</ul>` : '';
+  const nowHtml = working ? `<p class="now">${ICON.doing}<span>${esc(T('ui.nowLine', { when: plan.activity.done ? T('ui.nowJust') : T('ui.nowNow'), text: plan.activity.text }))}</span></p>` : '';
+  const touchedHtml = tl.length ? `<div class="tlabel">${esc(T('ui.touched'))}</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(T('ui.fileLine', { verb: t.verb, name: t.name }))}</span></li>`).join('')}${tl.length > 6 ? `<li><span>${esc(T('ui.moreFiles', { n: tl.length - 6 }))}</span></li>` : ''}</ul>` : '';
   $('card').innerHTML = `
-    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${num ? '關卡 ' + num : '已移出主路'}</span></div>
+    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${esc(num ? T('ui.cardNum', { n: num }) : T('ui.offRoad'))}</span></div>
     <h2>${esc(l.title)}</h2>
     <p>${esc(l.plain)}</p>
     ${nowHtml}${touchedHtml}
-    ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>要請你做的事</b>${esc(plan.waitingFor)}</p>` : ''}
+    ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>${esc(T('ui.whyWait'))}</b>${esc(plan.waitingFor)}</p>` : ''}
     ${l.steps && l.steps.length ? `<ul class="steps">${l.steps.map(st => `<li class="${st.done ? 'ok' : ''}">${st.done ? ICON.done : ICON.todo}<span>${esc(st.title)}</span></li>`).join('')}</ul>` : ''}
-    ${l.reason ? `<p class="why"><b>為什麼變了</b>${esc(l.reason)}</p>` : ''}
-    <p class="tech"><span>技術細節</span>${esc(l.tech)}</p>`;
+    ${l.reason ? `<p class="why"><b>${esc(T('ui.whyChanged'))}</b>${esc(l.reason)}</p>` : ''}
+    <p class="tech"><span>${esc(T('ui.tech'))}</span>${esc(l.tech)}</p>`;
 }
 
 function renderSessions(p) {
@@ -662,11 +853,11 @@ function renderSessions(p) {
   if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
   const af = document.activeElement, focusId = af && af.classList && af.classList.contains('srow') ? af.dataset.id : null;
   box.hidden = false;
-  box.innerHTML = `<div class="eyebrow">對話（${list.length}）</div><div class="slist">${list.map(x => {
+  box.innerHTML = `<div class="eyebrow">${esc(T('ui.sessions', { n: list.length }))}</div><div class="slist">${list.map(x => {
     const icon = x.waiting ? ICON.wait : (x.total && x.done === x.total) ? ICON.done : x.mood === 'work' ? ICON.doing : ICON.todo;
     const pct = x.total ? Math.round(x.done / x.total * 100) : 0;
-    return `<button type="button" class="srow${x.id === p.selected ? ' sel' : ''}${x.waiting ? ' w' : ''}" data-id="${esc(x.id)}" aria-pressed="${x.id === p.selected}" aria-label="${esc(x.name)}，${x.waiting ? '在等你' : `已通關 ${x.done} / ${x.total}`}，點一下切換">
-      <span class="sic">${icon}</span><span class="snm">${esc(x.name)}</span><span class="sbar"><i style="width:${pct}%"></i></span><span class="scnt">${x.waiting ? '等你' : `${x.done}/${x.total}`}</span></button>`;
+    return `<button type="button" class="srow${x.id === p.selected ? ' sel' : ''}${x.waiting ? ' w' : ''}" data-id="${esc(x.id)}" aria-pressed="${x.id === p.selected}" aria-label="${esc(T('ui.sAria', { name: x.name, state: x.waiting ? T('ui.sAriaWait') : T('ui.sAriaProg', { done: x.done, total: x.total }) }))}">
+      <span class="sic">${icon}</span><span class="snm">${esc(x.name)}</span><span class="sbar"><i style="width:${pct}%"></i></span><span class="scnt">${x.waiting ? esc(T('ui.sWaiting')) : `${x.done}/${x.total}`}</span></button>`;
   }).join('')}</div>`;
   if (focusId) { const el = [...box.querySelectorAll('.srow')].find(b => b.dataset.id === focusId); if (el) el.focus(); }
 }
@@ -684,8 +875,8 @@ function renderWorlds() {
     const n = plan.round - arr.length + i;
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'world';
-    b.setAttribute('aria-label', `世界 ${n}：${w.name}，已通過。看這一輪做了什麼`);
-    b.innerHTML = `<span class="disc">${ICON.flag}</span><span class="name">世界 ${n}・${esc(w.name)}</span>`;
+    b.setAttribute('aria-label', T('ui.worldLabel', { n, name: w.name }));
+    b.innerHTML = `<span class="disc">${ICON.flag}</span><span class="name">${esc(T('ui.world', { n, name: w.name }))}</span>`;
     const wp = WORLD_POS[WORLD_POS.length - arr.length + i];
     put(b, wp);
     b.addEventListener('click', ev => {
@@ -694,7 +885,7 @@ function renderWorlds() {
       if (!pop.hidden && pop.dataset.w === String(i)) { pop.hidden = true; return; }
       pop.dataset.w = i;
       pop.style.left = wp.x + 'px'; pop.style.top = (wp.y - 52) + 'px';
-      pop.innerHTML = `<h3>世界 ${n}・${esc(w.name)}　已通過</h3><ul>${w.summary.split(/[、，,]/).map(s => `<li>${ICON.done}<span>${esc(s.trim())}</span></li>`).join('')}</ul>`;
+      pop.innerHTML = `<h3>${esc(T('ui.worldPassed', { n, name: w.name }))}</h3><ul>${w.summary.split(/[、，,]/).map(s => `<li>${ICON.done}<span>${esc(s.trim())}</span></li>`).join('')}</ul>`;
       pop.hidden = false;
     });
     box.appendChild(b);
@@ -715,7 +906,7 @@ function hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('sh
 $('trees').innerHTML = [[395, 470, 1], [505, 345, 1], [660, 318, 1], [870, 335, 1], [1040, 430, 1], [1075, 610, 1], [610, 752, 1], [930, 720, 1], [700, 440, 1],
   [60, 520, 0], [200, 500, 0], [330, 790, 0], [40, 720, 0]].map(([x, y, live]) =>
   `<g transform="translate(${x} ${y})" opacity="${live ? 1 : .55}"><rect x="-3" y="6" width="6" height="14" rx="2" fill="#8a6a45"/><circle cx="0" cy="-2" r="15" fill="${live ? '#4fae5f' : '#8fb58c'}"/><circle cx="-9" cy="5" r="10" fill="${live ? '#5fbd6c' : '#9cc099'}"/><circle cx="9" cy="5" r="10" fill="${live ? '#43a054' : '#86ad83'}"/></g>`).join('');
-$('finalLock').innerHTML = ICON.wait + '未解鎖';
+$('finalLock').innerHTML = ICON.wait + T('ui.locked');
 
 /* ---------- 示範切換 ---------- */
 // 示範版的第二個對話（blog），讓清單與切換看得到
@@ -751,15 +942,21 @@ addEventListener('resize', fit); fit();
 
 if (pet) {
   document.documentElement.classList.add('live'); fit();
-  $('btnMini').innerHTML = svg('<path d="M4 12h12M11 7l5 5-5 5M20 4v16"/>') + '縮到旁邊';
   $('btnClose').innerHTML = ICON.cancel;
   $('btnMini').addEventListener('click', () => pet.minimize());
   $('btnClose').addEventListener('click', () => pet.close());
-  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : '等待連線（Claude Code 或 Cowork）'; render(p); });
+  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : T('ui.connecting'); render(p); });
   pet.ready();
 } else {
   demoClub = structuredClone(SCENARIOS.normal); demoShow();
 }
+applyStatic();
+$('langSel').addEventListener('change', e => {
+  const v = e.target.value;
+  if (pet) { pet.setLang(v); return; }   // 桌面程式：主程式存起來並重新載入畫面
+  langSetting = v; store.set(v); LANG = I.valid(v) ? v : I.detect(navigator.language);
+  applyStatic(); $('worlds').dataset.key = ''; if (plan) render(plan, { quiet: true });
+});
 /* 之後接上真正的 AI：把每次回覆最後的 JSON 丟進來就會更新地圖 */
 window.QuestMap = { update: p => render(p, { resetSelection: true }), scenarios: SCENARIOS };
 })();

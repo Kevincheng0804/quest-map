@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>闖關進度</title>
+<title>Quest progress</title>
 <style>
   /* 邊緣水位的小把手：顯示倒滿了幾杯，點一下展開地圖，按住可以拖 */
   :root { --shell: #12161d; --shell-edge: #2b323d; --text: #f1f3f6; --water: #8fd3ff; --wait: #ff8a2a; --full: #60d6aa; }
@@ -25,22 +25,26 @@
 </style>
 </head>
 <body>
-<button type="button" id="bat" aria-label="展開闖關地圖">
+<button type="button" id="bat" aria-label="Open the quest map">
   <span class="pill">
     <svg class="drop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5c3.6 4.3 6.5 7.8 6.5 11.6a6.5 6.5 0 0 1-13 0C5.500 10.300 8.400 6.800 12 2.500z"/></svg>
     <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
     <span id="count">0/0</span>
   </span>
 </button>
+<script src="i18n.js"></script>
 <script>
   const pet = window.questPet;
+  const T = (k, p) => QuestI18n.t(k, p, pet.lang.lang);
+  document.documentElement.lang = pet.lang.lang === 'en' ? 'en' : 'zh-Hant';
+  document.title = T('win.bat');
   const bat = document.getElementById('bat'), count = document.getElementById('count');
   function show(s) {
-    count.textContent = s.waiting ? (s.waitingName ? `等你 · ${s.waitingName}` : '等你') : `${s.done}/${s.total}`;
+    count.textContent = s.waiting ? (s.waitingName ? T('bat.waitName', { name: s.waitingName }) : T('bat.wait')) : `${s.done}/${s.total}`;
     bat.classList.toggle('waiting', !!s.waiting);
     bat.classList.toggle('full', !!s.total && s.done === s.total);
-    bat.setAttribute('aria-label', `${s.waiting ? (s.waitingName ? `${s.waitingName} 的 Claude 在等你。` : 'Claude 在等你。') : ''}已倒滿 ${s.done} 杯，共 ${s.total} 個任務。點一下展開闖關地圖，按住可以拖到別的位置`);
-    bat.title = s.waiting ? (s.waitingFor || 'Claude 在等你') : `已完成 ${s.done} / ${s.total} 個任務`;
+    bat.setAttribute('aria-label', (s.waiting ? (s.waitingName ? T('bat.ariaWaitName', { name: s.waitingName }) : T('bat.ariaWait')) : '') + T('bat.ariaProg', { done: s.done, total: s.total }));
+    bat.title = s.waiting ? (s.waitingFor || T('bat.titleWait')) : T('bat.title', { done: s.done, total: s.total });
   }
 
   // 點一下展開；按住拖超過幾個像素就變成搬家，放開會自動貼回螢幕邊緣

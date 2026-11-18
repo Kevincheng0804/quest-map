@@ -1,7 +1,11 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
+const lang = ipcRenderer.sendSync('pet:lang');   // { setting: 'auto' | 語言代碼, lang: 實際使用的語言 }
+
 contextBridge.exposeInMainWorld('questPet', {
+  lang,
+  setLang: v => ipcRenderer.send('pet:set-lang', v),
   onPlan: fn => ipcRenderer.on('plan', (_e, plan) => fn(plan)),
   onSummary: fn => ipcRenderer.on('summary', (_e, s) => fn(s)),
   onSide: fn => ipcRenderer.on('side', (_e, side) => fn(side)),

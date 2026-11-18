@@ -222,6 +222,7 @@ html.live body { padding: 0; background: var(--sea); }
 html.live .fit { border-radius: 0; box-shadow: none; }
 html.live .demo { -webkit-app-region: drag; }
 html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 8px; }
+#langSel { height: 36px; border-radius: 18px; border: 1.5px solid var(--todo-edge); background: #fff; font-size: 13px; font-weight: 600; padding: 0 10px; color: var(--ink); }
 .demo button.win svg { width: 18px; height: 18px; }
 .demo button#btnClose { width: 44px; padding: 0; justify-content: center; }
 
@@ -237,7 +238,7 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
 <div class="stage" id="stage">
 
   <div class="demo">
-    <div class="demo-title">AI 任務闖關地圖 <small id="subTitle">範例任務：做一個社團報名網站</small></div>
+    <div class="demo-title"><span data-i18n="ui.title">AI 任務闖關地圖</span> <small id="subTitle">範例任務：做一個社團報名網站</small></div>
     <span class="demo-label demo-only">示範情境</span>
     <button type="button" class="demo-only" data-sc="normal" aria-pressed="true">正常進行</button>
     <button type="button" class="demo-only" data-sc="wait" aria-pressed="false">等你操作</button>
@@ -246,8 +247,9 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
     <button type="button" class="demo-only" data-sc="small" aria-pressed="false">小修改</button>
     <button type="button" class="demo-only" data-sc="finish" aria-pressed="false">全部完成</button>
     <button type="button" class="demo-only" data-sc="change" aria-pressed="false">改變心意</button>
+    <select id="langSel" data-i18n-aria="ui.lang"></select>
     <button type="button" class="win live-only" id="btnMini"></button>
-    <button type="button" class="win live-only" id="btnClose" aria-label="關閉闖關地圖"></button>
+    <button type="button" class="win live-only" id="btnClose" data-i18n-aria="ui.close" aria-label="關閉闖關地圖"></button>
   </div>
 
   <svg class="map" viewBox="0 0 1440 900" aria-hidden="true">
@@ -306,11 +308,11 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
   <div id="worldpop" hidden></div>
 
   <div class="hud" id="where">
-    <div class="eyebrow">目前位置</div>
+    <div class="eyebrow" data-i18n="ui.where">目前位置</div>
     <h1 id="whereName"></h1>
     <div class="goal" id="whereGoal"></div>
-    <div class="bar" role="progressbar" aria-label="本世界進度" aria-valuemin="0" id="barBox"><i id="barFill"></i></div>
-    <div class="count"><span>關卡 <b id="cntNow"></b></span><span id="cntDone"></span></div>
+    <div class="bar" role="progressbar" data-i18n-aria="ui.progress" aria-label="本世界進度" aria-valuemin="0" id="barBox"><i id="barFill"></i></div>
+    <div class="count"><span><span data-i18n="ui.levelCount">關卡</span> <b id="cntNow"></b></span><span id="cntDone"></span></div>
   </div>
   <div class="hud" id="sessions" hidden></div>
   <div class="hud" id="said"><div class="eyebrow" id="saidLabel">你剛剛說</div><p id="saidText"></p></div>
@@ -334,9 +336,25 @@ const ICON = {
   flag: svg('<path d="M6 21V4"/><path d="M6 5h11l-2.5 4L17 13H6" fill="currentColor"/>'),
   bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>')
 };
-const STATUS = { todo: '未開始', doing: '進行中', wait: '等你開門', done: '已通關', adjust: '施工中', cancel: '已拆除' };
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const I = window.QuestI18n;
 const pet = window.questPet || null;   // 桌面寵物模式才有
+// 語言：桌面程式由主程式決定（預設跟系統）；單獨開網頁時看瀏覽器語言，選過的記在 localStorage
+const store = { get() { try { return localStorage.getItem('questLang'); } catch { return null; } }, set(v) { try { localStorage.setItem('questLang', v); } catch { /* 存不了就算了 */ } } };
+let langSetting = pet ? pet.lang.setting : (store.get() || 'auto');
+let LANG = pet ? pet.lang.lang : (I.valid(langSetting) ? langSetting : I.detect(navigator.language));
+const T = (k, p) => I.t(k, p, LANG);
+const STATUS = new Proxy({}, { get: (_o, k) => T('status.' + String(k)) });
+function applyStatic() {
+  document.documentElement.lang = LANG === 'en' ? 'en' : 'zh-Hant';
+  document.title = T('ui.title');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = T(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', T(el.dataset.i18nAria)));
+  const sel = $('langSel');
+  sel.innerHTML = `<option value="auto">${esc(T('ui.langAuto'))}</option>` + I.LANGS.map(l => `<option value="${l.code}">${esc(l.label)}</option>`).join('');
+  sel.value = langSetting;
+  $('btnMini').innerHTML = svg('<path d="M4 12h12M11 7l5 5-5 5M20 4v16"/>') + esc(T('ui.mini'));
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const MAXV = 7;                         // 地圖上最多同時畫幾關，其餘收起來
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -478,7 +496,7 @@ function windowed(p, robotAt) {
   });
   return { levels, before: start, after: act.length - start - MAXV };
 }
-const signText = (p, l) => (p.choice && robotLevel(p) === l) ? '暫停' : '回頭修';
+const signText = (p, l) => (p.choice && robotLevel(p) === l) ? T('ui.tagPause') : T('ui.tagSign');
 
 function render(next, opts = {}) {
   prev = plan; plan = next;
@@ -491,8 +509,8 @@ function render(next, opts = {}) {
   const viewActive = view.levels.filter(l => l.status !== 'cancel');
   if (opts.resetSelection || !view.levels.some(l => l.id === selected)) follow = true;
   if (follow) selected = robotAt.id;
-  $('moreBefore').hidden = !view.before; $('moreBefore').textContent = `前面 ${view.before} 關已走過`;
-  $('moreAfter').hidden = !view.after; $('moreAfter').textContent = `後面還有 ${view.after} 關`;
+  $('moreBefore').hidden = !view.before; $('moreBefore').textContent = T('ui.before', { n: view.before });
+  $('moreAfter').hidden = !view.after; $('moreAfter').textContent = T('ui.after', { n: view.after });
 
   // 比對新舊計畫
   const old = new Map((prev ? prev.levels : []).map(l => [l.id, l]));
@@ -521,9 +539,9 @@ function render(next, opts = {}) {
     } else { el.classList.remove('pop'); }
     const num = active.indexOf(l) + 1;
     el.className = `level ${l.status}${el.classList.contains('pop') ? ' pop' : ''}`;
-    el.setAttribute('aria-label', `${num ? '關卡 ' + num + '：' : ''}${l.title}，狀態：${STATUS[l.status]}`);
+    el.setAttribute('aria-label', (num ? T('ui.levelAria', { num, title: l.title, status: STATUS[l.status] }) : T('ui.levelAria0', { title: l.title, status: STATUS[l.status] })));
     const low = viewActive.indexOf(l) % 2 === 0 ? ' low' : '';   // 位置偏低的關卡，牌子掛下面才不會擋到鄰居
-    const tag = l.status === 'adjust' ? `<span class="tag sign${low}">${signText(plan, l)}</span>` : l.isNew ? `<span class="tag new${low}">新關卡</span>` : '';
+    const tag = l.status === 'adjust' ? `<span class="tag sign${low}">${signText(plan, l)}</span>` : l.isNew ? `<span class="tag new${low}">${esc(T('ui.tagNew'))}</span>` : '';
     const face = (l.status === 'todo' || l.status === 'doing') ? num : ICON[l.status];
     el.firstChild.innerHTML = `${tag}<span class="disc">${face}</span><span class="name">${esc(l.title)}</span>`;
     requestAnimationFrame(() => put(el, pos[l.id]));
@@ -542,7 +560,7 @@ function render(next, opts = {}) {
   $('islandFinal').classList.toggle('on', complete);
   document.querySelectorAll('.cloud').forEach(c => c.classList.toggle('gone', complete));
   document.querySelector('.final').classList.toggle('on', complete);
-  $('finalLock').innerHTML = complete ? ICON.flag + '已完成' : ICON.wait + '未解鎖';
+  $('finalLock').innerHTML = complete ? ICON.flag + esc(T('ui.finished')) : ICON.wait + esc(T('ui.locked'));
   renderBubble();
   $('robot').className = (complete ? 'far ' : '') + (active.some(l => l.status === 'wait') ? 'wait'
     : active.length && active.every(l => l.status === 'done') ? 'happy'
@@ -571,15 +589,15 @@ function render(next, opts = {}) {
   // 固定資訊
   const done = active.filter(l => l.status === 'done').length;
   const at = Math.max(active.indexOf(robotAt), 0) + 1;
-  $('whereName').textContent = `世界 ${plan.round}・${plan.world}`;
-  $('whereGoal').textContent = `這一輪的目標：${plan.goal}`;
+  $('whereName').textContent = T('ui.world', { n: plan.round, name: plan.world });
+  $('whereGoal').textContent = T('ui.goal', { goal: plan.goal });
   $('barFill').style.width = (active.length ? done / active.length * 100 : 0) + '%';
   $('barBox').setAttribute('aria-valuemax', active.length);
   $('barBox').setAttribute('aria-valuenow', done);
   $('cntNow').textContent = `${at} / ${active.length}`;
-  $('cntDone').textContent = `已通關 ${done} 關`;
-  $('saidLabel').textContent = plan.source === 'chat' ? '這次的任務' : '你剛剛說';
-  $('saidText').textContent = `「${plan.userSaid}」`;
+  $('cntDone').textContent = T('ui.doneCount', { n: done });
+  $('saidLabel').textContent = plan.source === 'chat' ? T('ui.task') : T('ui.said');
+  $('saidText').textContent = T('ui.quote', { s: plan.userSaid });
   $('finalName').textContent = plan.finalGoal;
   renderWorlds();
   renderSessions(plan);
@@ -588,7 +606,7 @@ function render(next, opts = {}) {
   // 只有結構改變才通知
   let msg = plan.toast;
   if (msg === undefined && (diff.added || diff.cancelled || diff.rework)) {
-    msg = '地圖更新！' + [diff.added && `新增 ${diff.added} 關`, diff.cancelled && `拆掉 ${diff.cancelled} 關`, diff.rework && `${diff.rework} 關要回頭修`].filter(Boolean).join('，');
+    msg = T('toast.prefix') + [diff.added && T('toast.added', { n: diff.added }), diff.cancelled && T('toast.cancelled', { n: diff.cancelled }), diff.rework && T('toast.rework', { n: diff.rework })].filter(Boolean).join(T('sep.toast'));
   }
   if (msg && !opts.quiet) showToast(msg); else hideToast();
 }
@@ -599,8 +617,8 @@ function markSelected() { els.forEach((el, id) => el.classList.toggle('sel', id 
 function waitAgeText(since) {
   if (!since) return '';
   const sec = Math.max(0, Math.floor((Date.now() - since) / 1000)), m = Math.floor(sec / 60);
-  const base = m < 1 ? '剛剛開始等' : `已等 ${m} 分鐘`;
-  return sec >= 120 ? `${base}。如果你已經按過同意，這一步做完地圖才會更新` : base;
+  const base = m < 1 ? T('ui.waitJust') : T('ui.waitMin', { m });
+  return sec >= 120 ? T('ui.waitLong', { base }) : base;
 }
 setInterval(() => { const el = $('waitAge'); if (el && plan && plan.waitSince) el.textContent = waitAgeText(plan.waitSince); }, 15000);
 
@@ -608,7 +626,7 @@ function renderBubble() {
   const b = $('bub');
   if (plan.waitingFor) {
     b.className = 'bub wait';
-    b.innerHTML = `<div class="head">${ICON.wait}等你開門</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
+    b.innerHTML = `<div class="head">${ICON.wait}${esc(T('ui.waitHead'))}</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
     if (!pet) $('keyBtn').addEventListener('click', () => {
       render({ ...plan, waitingFor: null, toast: null, aiSays: '收到鑰匙了！門打開，繼續前進。',
         levels: plan.levels.map(l => l.status === 'wait' ? { ...l, status: 'doing', reason: '門已打開：你交出了鑰匙' } : l) }, { quiet: true });
@@ -637,17 +655,17 @@ function renderCard() {
   const num = plan.levels.filter(x => x.status !== 'cancel').indexOf(l) + 1;
   const working = (l.status === 'doing' || l.status === 'adjust') && plan.activity;
   const tl = l.touched || [];
-  const nowHtml = working ? `<p class="now">${ICON.doing}<span>${plan.activity.done ? '剛剛' : '現在'}：${esc(plan.activity.text)}</span></p>` : '';
-  const touchedHtml = tl.length ? `<div class="tlabel">這次動過的檔案</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(t.verb)} ${esc(t.name)}</span></li>`).join('')}${tl.length > 6 ? `<li><span>還有 ${tl.length - 6} 個</span></li>` : ''}</ul>` : '';
+  const nowHtml = working ? `<p class="now">${ICON.doing}<span>${esc(T('ui.nowLine', { when: plan.activity.done ? T('ui.nowJust') : T('ui.nowNow'), text: plan.activity.text }))}</span></p>` : '';
+  const touchedHtml = tl.length ? `<div class="tlabel">${esc(T('ui.touched'))}</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(T('ui.fileLine', { verb: t.verb, name: t.name }))}</span></li>`).join('')}${tl.length > 6 ? `<li><span>${esc(T('ui.moreFiles', { n: tl.length - 6 }))}</span></li>` : ''}</ul>` : '';
   $('card').innerHTML = `
-    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${num ? '關卡 ' + num : '已移出主路'}</span></div>
+    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${esc(num ? T('ui.cardNum', { n: num }) : T('ui.offRoad'))}</span></div>
     <h2>${esc(l.title)}</h2>
     <p>${esc(l.plain)}</p>
     ${nowHtml}${touchedHtml}
-    ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>要請你做的事</b>${esc(plan.waitingFor)}</p>` : ''}
+    ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>${esc(T('ui.whyWait'))}</b>${esc(plan.waitingFor)}</p>` : ''}
     ${l.steps && l.steps.length ? `<ul class="steps">${l.steps.map(st => `<li class="${st.done ? 'ok' : ''}">${st.done ? ICON.done : ICON.todo}<span>${esc(st.title)}</span></li>`).join('')}</ul>` : ''}
-    ${l.reason ? `<p class="why"><b>為什麼變了</b>${esc(l.reason)}</p>` : ''}
-    <p class="tech"><span>技術細節</span>${esc(l.tech)}</p>`;
+    ${l.reason ? `<p class="why"><b>${esc(T('ui.whyChanged'))}</b>${esc(l.reason)}</p>` : ''}
+    <p class="tech"><span>${esc(T('ui.tech'))}</span>${esc(l.tech)}</p>`;
 }
 
 function renderSessions(p) {
@@ -655,11 +673,11 @@ function renderSessions(p) {
   if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
   const af = document.activeElement, focusId = af && af.classList && af.classList.contains('srow') ? af.dataset.id : null;
   box.hidden = false;
-  box.innerHTML = `<div class="eyebrow">對話（${list.length}）</div><div class="slist">${list.map(x => {
+  box.innerHTML = `<div class="eyebrow">${esc(T('ui.sessions', { n: list.length }))}</div><div class="slist">${list.map(x => {
     const icon = x.waiting ? ICON.wait : (x.total && x.done === x.total) ? ICON.done : x.mood === 'work' ? ICON.doing : ICON.todo;
     const pct = x.total ? Math.round(x.done / x.total * 100) : 0;
-    return `<button type="button" class="srow${x.id === p.selected ? ' sel' : ''}${x.waiting ? ' w' : ''}" data-id="${esc(x.id)}" aria-pressed="${x.id === p.selected}" aria-label="${esc(x.name)}，${x.waiting ? '在等你' : `已通關 ${x.done} / ${x.total}`}，點一下切換">
-      <span class="sic">${icon}</span><span class="snm">${esc(x.name)}</span><span class="sbar"><i style="width:${pct}%"></i></span><span class="scnt">${x.waiting ? '等你' : `${x.done}/${x.total}`}</span></button>`;
+    return `<button type="button" class="srow${x.id === p.selected ? ' sel' : ''}${x.waiting ? ' w' : ''}" data-id="${esc(x.id)}" aria-pressed="${x.id === p.selected}" aria-label="${esc(T('ui.sAria', { name: x.name, state: x.waiting ? T('ui.sAriaWait') : T('ui.sAriaProg', { done: x.done, total: x.total }) }))}">
+      <span class="sic">${icon}</span><span class="snm">${esc(x.name)}</span><span class="sbar"><i style="width:${pct}%"></i></span><span class="scnt">${x.waiting ? esc(T('ui.sWaiting')) : `${x.done}/${x.total}`}</span></button>`;
   }).join('')}</div>`;
   if (focusId) { const el = [...box.querySelectorAll('.srow')].find(b => b.dataset.id === focusId); if (el) el.focus(); }
 }
@@ -677,8 +695,8 @@ function renderWorlds() {
     const n = plan.round - arr.length + i;
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'world';
-    b.setAttribute('aria-label', `世界 ${n}：${w.name}，已通過。看這一輪做了什麼`);
-    b.innerHTML = `<span class="disc">${ICON.flag}</span><span class="name">世界 ${n}・${esc(w.name)}</span>`;
+    b.setAttribute('aria-label', T('ui.worldLabel', { n, name: w.name }));
+    b.innerHTML = `<span class="disc">${ICON.flag}</span><span class="name">${esc(T('ui.world', { n, name: w.name }))}</span>`;
     const wp = WORLD_POS[WORLD_POS.length - arr.length + i];
     put(b, wp);
     b.addEventListener('click', ev => {
@@ -687,7 +705,7 @@ function renderWorlds() {
       if (!pop.hidden && pop.dataset.w === String(i)) { pop.hidden = true; return; }
       pop.dataset.w = i;
       pop.style.left = wp.x + 'px'; pop.style.top = (wp.y - 52) + 'px';
-      pop.innerHTML = `<h3>世界 ${n}・${esc(w.name)}　已通過</h3><ul>${w.summary.split(/[、，,]/).map(s => `<li>${ICON.done}<span>${esc(s.trim())}</span></li>`).join('')}</ul>`;
+      pop.innerHTML = `<h3>${esc(T('ui.worldPassed', { n, name: w.name }))}</h3><ul>${w.summary.split(/[、，,]/).map(s => `<li>${ICON.done}<span>${esc(s.trim())}</span></li>`).join('')}</ul>`;
       pop.hidden = false;
     });
     box.appendChild(b);
@@ -708,7 +726,7 @@ function hideToast() { clearTimeout(toastTimer); $('toast').classList.remove('sh
 $('trees').innerHTML = [[395, 470, 1], [505, 345, 1], [660, 318, 1], [870, 335, 1], [1040, 430, 1], [1075, 610, 1], [610, 752, 1], [930, 720, 1], [700, 440, 1],
   [60, 520, 0], [200, 500, 0], [330, 790, 0], [40, 720, 0]].map(([x, y, live]) =>
   `<g transform="translate(${x} ${y})" opacity="${live ? 1 : .55}"><rect x="-3" y="6" width="6" height="14" rx="2" fill="#8a6a45"/><circle cx="0" cy="-2" r="15" fill="${live ? '#4fae5f' : '#8fb58c'}"/><circle cx="-9" cy="5" r="10" fill="${live ? '#5fbd6c' : '#9cc099'}"/><circle cx="9" cy="5" r="10" fill="${live ? '#43a054' : '#86ad83'}"/></g>`).join('');
-$('finalLock').innerHTML = ICON.wait + '未解鎖';
+$('finalLock').innerHTML = ICON.wait + T('ui.locked');
 
 /* ---------- 示範切換 ---------- */
 // 示範版的第二個對話（blog），讓清單與切換看得到
@@ -744,15 +762,21 @@ addEventListener('resize', fit); fit();
 
 if (pet) {
   document.documentElement.classList.add('live'); fit();
-  $('btnMini').innerHTML = svg('<path d="M4 12h12M11 7l5 5-5 5M20 4v16"/>') + '縮到旁邊';
   $('btnClose').innerHTML = ICON.cancel;
   $('btnMini').addEventListener('click', () => pet.minimize());
   $('btnClose').addEventListener('click', () => pet.close());
-  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : '等待連線（Claude Code 或 Cowork）'; render(p); });
+  pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : T('ui.connecting'); render(p); });
   pet.ready();
 } else {
   demoClub = structuredClone(SCENARIOS.normal); demoShow();
 }
+applyStatic();
+$('langSel').addEventListener('change', e => {
+  const v = e.target.value;
+  if (pet) { pet.setLang(v); return; }   // 桌面程式：主程式存起來並重新載入畫面
+  langSetting = v; store.set(v); LANG = I.valid(v) ? v : I.detect(navigator.language);
+  applyStatic(); $('worlds').dataset.key = ''; if (plan) render(plan, { quiet: true });
+});
 /* 之後接上真正的 AI：把每次回覆最後的 JSON 丟進來就會更新地圖 */
 window.QuestMap = { update: p => render(p, { resetSelection: true }), scenarios: SCENARIOS };
 })();

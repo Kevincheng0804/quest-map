@@ -3,7 +3,8 @@ const { app, BrowserWindow, ipcMain, screen, Notification } = require('electron'
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const { createHub, summarize } = require('./state');
+const { createHub, summarize, setLang } = require('./state');
+const I18n = require('./i18n');
 const { snapBattery, placeBattery, fitsDisplay } = require('./placement');
 const { createStats } = require('./stats');
 
@@ -18,6 +19,10 @@ const stats = createStats(Date.now, VERSION);
 const startedAt = new Date().toISOString();
 let mapWin = null, batWin = null, edgeWin = null, lastPlan = hub.plan(), override = false, waitingIds = new Set();
 let dragFrom = null, saveTimer = 0;
+// 語言：設定存在 window-state.json（'auto' 或語言代碼），auto 就跟系統。QUEST_PET_LANG 可以強制（測試用）
+const langSetting = () => process.env.QUEST_PET_LANG || (I18n.valid(saved.lang) ? saved.lang : 'auto');
+const langNow = () => { const s = langSetting(); return I18n.valid(s) ? s : I18n.detect(app.getLocale()); };
+const tr = (k, p) => I18n.t(k, p, langNow());
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -57,8 +62,8 @@ function broadcast(plan) {
     if (!now.has(x.id) || waitingIds.has(x.id) || !mapWin || mapWin.isVisible() || !Notification.isSupported()) continue;
     const many = list.length > 1;
     const n = new Notification({
-      title: many ? `Claude Code 在等你・${x.name}` : 'Claude Code 在等你',
-      body: x.waitingFor || '有一關需要你出手'
+      title: many ? tr('notif.titleName', { name: x.name }) : tr('notif.title'),
+      body: x.waitingFor || tr('notif.body')
     });
     n.on('click', () => { if (x.id !== '_' && hub.select(x.id) && !override) broadcast(hub.plan()); expand(); });
     n.show();
@@ -103,7 +108,7 @@ function expand() { mapWin.show(); batWin.hide(); edgeWin.hide(); saved.mode = '
 function createWindows() {
   const common = { frame: false, alwaysOnTop: true, show: false, webPreferences: { preload: path.join(__dirname, 'preload.js') } };
   const mapBounds = fitsDisplay(saved.map, workAreas()) ? saved.map : MAP;
-  mapWin = new BrowserWindow({ ...common, ...mapBounds, minWidth: 480, minHeight: 300, backgroundColor: '#cfe6ec', title: 'AI 任務闖關地圖' });
+  mapWin = new BrowserWindow({ ...common, ...mapBounds, minWidth: 480, minHeight: 300, backgroundColor: '#cfe6ec', title: tr('win.map') });
   mapWin.setAspectRatio(1440 / 900);
   mapWin.loadFile(path.join(__dirname, 'map.html'));
   const remember = () => { if (mapWin.isVisible() && !mapWin.isMinimized()) { saved.map = mapWin.getBounds(); saveSoon(); } };
@@ -112,8 +117,8 @@ function createWindows() {
   mapWin.on('close', () => { remember(); saveNow(); });
   mapWin.on('closed', () => app.quit());
 
-  batWin = new BrowserWindow({ ...common, ...BAT, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false, title: '闖關進度' });
-  edgeWin = new BrowserWindow({ ...common, width: 800, height: 600, transparent: true, resizable: false, movable: false, focusable: false, skipTaskbar: true, hasShadow: false, title: '邊緣水位' });
+  batWin = new BrowserWindow({ ...common, ...BAT, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false, title: tr('win.bat') });
+  edgeWin = new BrowserWindow({ ...common, width: 800, height: 600, transparent: true, resizable: false, movable: false, focusable: false, skipTaskbar: true, hasShadow: false, title: tr('win.edge') });
   edgeWin.setIgnoreMouseEvents(true);
   edgeWin.setAlwaysOnTop(true, 'screen-saver');
   edgeWin.loadFile(path.join(__dirname, 'edge.html'));
@@ -147,7 +152,7 @@ function startServer() {
         if (hub.handle(data) && !override) scheduleBroadcast();
       } else if (req.url === '/ping') {
         stats.ping(data);
-        if (Notification.isSupported()) new Notification({ title: '闖關地圖：收到連線測試', body: `來自 ${data.host || '未知'}（${data.platform || '?'}）` }).show();
+        if (Notification.isSupported()) new Notification({ title: tr('notif.ping'), body: tr('notif.pingBody', { host: data.host || tr('notif.unknown'), platform: data.platform || '?' }) }).show();
       } else if (req.url === '/describe') {
         stats.record('describe', data);
         // Claude 用 MCP 工具補上白話的世界名與關卡說明
@@ -180,11 +185,20 @@ function startServer() {
 
 app.whenReady().then(() => {
   loadSaved();
+  setLang(langNow());
+  lastPlan = hub.plan();   // 模組載入時語言還沒定，重新產生一次待命畫面
   createWindows();
   startServer();
   ipcMain.on('pet:ready', e => {
     if (mapWin && e.sender === mapWin.webContents) e.sender.send('plan', { ...lastPlan, toast: null });
     else { e.sender.send('summary', summarize(lastPlan)); e.sender.send('side', (saved.battery && saved.battery.side) || 'right'); }
+  });
+  ipcMain.on('pet:lang', e => { e.returnValue = { setting: langSetting(), lang: langNow() }; });
+  // 換語言：存起來，重新載入三個畫面（載入後會自己要最新的計畫）
+  ipcMain.on('pet:set-lang', (_e, v) => {
+    saved.lang = I18n.valid(v) ? v : 'auto'; saveNow();
+    setLang(langNow());
+    for (const w of [mapWin, batWin, edgeWin]) if (w && !w.isDestroyed()) w.webContents.reload();
   });
   ipcMain.on('pet:select', (_e, id) => { if (hub.select(String(id))) broadcast(hub.plan()); });
   ipcMain.on('pet:minimize', minimize);
