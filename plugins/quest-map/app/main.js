@@ -198,6 +198,7 @@ app.whenReady().then(() => {
   ipcMain.on('pet:set-lang', (_e, v) => {
     saved.lang = I18n.valid(v) ? v : 'auto'; saveNow();
     setLang(langNow());
+    if (!override) lastPlan = hub.plan();   // 用新語言重新產生一次，重新載入的畫面才會拿到對的文字
     for (const w of [mapWin, batWin, edgeWin]) if (w && !w.isDestroyed()) w.webContents.reload();
   });
   ipcMain.on('pet:select', (_e, id) => { if (hub.select(String(id))) broadcast(hub.plan()); });
