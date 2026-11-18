@@ -134,7 +134,17 @@ svg.map { position: absolute; inset: 0; z-index: 1; }
 .final .lbl b { background: #fff; border-radius: 8px; padding: 2px 10px; font-size: 14px; color: var(--ink-soft); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); }
 .final .lbl span { display: inline-flex; gap: 5px; align-items: center; background: #5d6570; color: #fff; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 2px 10px 2px 7px; }
 .final .lbl svg { width: 13px; height: 13px; }
-.cloud { animation: drift 9s ease-in-out infinite alternate; }
+.cloud { animation: drift 9s ease-in-out infinite alternate; transition: opacity 1.6s ease; }
+.cloud.gone { opacity: 0; }
+/* 全部完成：城堡亮起來、雲散開、島嶼變綠 */
+.isl { transition: fill 1.4s ease; }
+.isl.on { fill: #bfe8aa; }
+.castle, .castle path { transition: fill 1.4s ease, stroke 1.4s ease; }
+.castle.on { fill: #f3d78b; stroke: #a8791f; }
+.castle.on .door { fill: #8a5a14; }
+.castle.on .flagc { fill: #e5484d; }
+.final.on .lbl span { background: var(--done); }
+#robot.far, #bubble.far { transition-duration: 1.8s; }
 .cloud.b { animation-duration: 12s; animation-direction: alternate-reverse; }
 @keyframes drift { to { transform: translateX(22px); } }
 
@@ -241,6 +251,7 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
     <button type="button" class="demo-only" data-sc="add" aria-pressed="false">做完後加功能</button>
     <button type="button" class="demo-only" data-sc="interrupt" aria-pressed="false">做到一半插話</button>
     <button type="button" class="demo-only" data-sc="small" aria-pressed="false">小修改</button>
+    <button type="button" class="demo-only" data-sc="finish" aria-pressed="false">全部完成</button>
     <button type="button" class="demo-only" data-sc="change" aria-pressed="false">改變心意</button>
     <button type="button" class="win live-only" id="btnMini"></button>
     <button type="button" class="win live-only" id="btnClose" aria-label="關閉闖關地圖"></button>
@@ -251,7 +262,7 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
     <path d="M-40 520 C60 430 260 470 360 560 C450 640 440 800 340 900 L-40 900 Z" fill="#d6e2cd"/>
     <path d="M360 500 C400 330 620 250 820 290 C1010 320 1130 400 1120 540 C1110 690 960 800 740 800 C520 800 330 690 360 500 Z" fill="#a9dd92"/>
     <path d="M470 520 C520 400 700 350 850 380 C980 410 1040 480 1010 570 C970 680 800 730 660 710 C520 690 440 620 470 520 Z" fill="#bfe8aa"/>
-    <path d="M1060 130 C1140 40 1340 40 1440 110 L1440 400 C1340 430 1150 410 1080 330 C1030 270 1020 190 1060 130 Z" fill="#cdd3de"/>
+    <path id="islandFinal" class="isl" d="M1060 130 C1140 40 1340 40 1440 110 L1440 400 C1340 430 1150 410 1080 330 C1030 270 1020 190 1060 130 Z" fill="#cdd3de"/>
     <g id="trees"></g>
     <path id="rEdge" fill="none" stroke="#c9b584" stroke-width="34" stroke-linecap="round"/>
     <path id="rBase" fill="none" stroke="#ecdcb4" stroke-width="26" stroke-linecap="round"/>
@@ -260,10 +271,10 @@ html.live .demo button { -webkit-app-region: no-drag; align-items: center; gap: 
     <path id="rFinal" fill="none" stroke="#7d8590" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 14"/>
     <path id="rCancel" fill="none" stroke="#7d8590" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 10"/>
     <!-- 終點城堡 -->
-    <g transform="translate(1250 240)" fill="#aeb5c0" stroke="#7d8590" stroke-width="3" stroke-linejoin="round">
+    <g id="castle" class="castle" transform="translate(1250 240)" fill="#aeb5c0" stroke="#7d8590" stroke-width="3" stroke-linejoin="round">
       <path d="M-46 50 V-14 h12 v-10 h10 v10 h12 V-40 h-8 v-12 h8 v6 h8 v-6 h8 v6 h8 v-6 h8 v12 h-8 V-14 h12 v-10 h10 v10 h12 V50 Z"/>
-      <path d="M-10 50 V26 a10 10 0 0 1 20 0 V50" fill="#8d95a1"/>
-      <path d="M0 -52 V-78 l18 7 -18 7" fill="#cdd3de"/>
+      <path class="door" d="M-10 50 V26 a10 10 0 0 1 20 0 V50" fill="#8d95a1"/>
+      <path class="flagc" d="M0 -52 V-78 l18 7 -18 7" fill="#cdd3de"/>
     </g>
     <g fill="#fff">
       <g class="cloud" opacity=".92"><ellipse cx="1190" cy="262" rx="62" ry="24"/><ellipse cx="1232" cy="244" rx="40" ry="24"/></g>
@@ -377,6 +388,8 @@ const SCENARIOS = {
     levels: [lv('f1', 'done'), lv('f2', 'done'),
       lv('f3', 'adjust', { reason: '暫停：因為你說「報名資料我想改存到 Google 試算表」，等你決定怎麼走' }),
       lv('f4', 'todo'), lv('f5', 'todo')] },
+  finish: { ...base, userSaid: '幫我做報名表單，報名成功後要寄確認信', aiSays: '這個世界全部通關！報名表單做好了。',
+    levels: [lv('f1', 'done'), lv('f2', 'done'), lv('f3', 'done'), lv('f4', 'done'), lv('f5', 'done')] },
   small: { ...base, round: 1, world: '把按鈕改紅色', goal: '把送出按鈕改成紅色', pastWorlds: [], finalGoal: '任務完成',
     userSaid: '把送出按鈕改成紅色', aiSays: '在「把按鈕改紅色」這關：正在修改 style.css…', activity: { text: '正在修改 style.css' },
     levels: [{ id: 'solo1', title: '把按鈕改紅色', status: 'doing', plain: '把送出按鈕的顏色改成紅色，讓人更容易看到', tech: '修改 style.css 按鈕背景色',
@@ -394,6 +407,7 @@ const SCENARIOS = {
 /* ---------- 座標：預先排好的插槽 ---------- */
 const WORLD_POS = [{ x: 115, y: 600 }, { x: 275, y: 678 }];
 const FINAL = { x: 1250, y: 250 };
+let finalOn = false;   // 全部完成了嗎（通往城堡的路要不要變綠）
 const SLOTS = {};
 for (let n = 1; n <= 8; n++) {
   SLOTS[n] = Array.from({ length: n }, (_, i) => {
@@ -438,6 +452,9 @@ function drawRoads(plan, pos) {
   $('rDone').setAttribute('d', head + s.slice(0, roadStart.length + reach).join(''));
   const last = P[P.length - 1];
   $('rFinal').setAttribute('d', `M${last.x} ${last.y - 20} Q${(last.x + FINAL.x) / 2 + 30} ${last.y - 90} ${FINAL.x - 50} ${FINAL.y + 60}`);
+  $('rFinal').setAttribute('stroke', finalOn ? '#35a862' : '#7d8590');
+  $('rFinal').setAttribute('stroke-width', finalOn ? '14' : '5');
+  $('rFinal').setAttribute('stroke-dasharray', finalOn ? 'none' : '4 14');
   // 已拆除：斷掉的虛線連回原位置（中間留一段缺口）
   let c = '';
   plan.levels.filter(l => l.status === 'cancel').forEach(l => {
@@ -521,12 +538,22 @@ function render(next, opts = {}) {
   markSelected();
 
   // 角色與泡泡用走的
-  put($('robot'), pos[robotAt.id]);
-  put($('bubble'), { x: pos[robotAt.id].x, y: pos[robotAt.id].y - 132 });
+  // 全部關卡（含使用者中途加的分支）都通關：機器人走到城堡大門前，城堡解鎖
+  const complete = active.length > 0 && active.every(l => l.status === 'done');
+  finalOn = complete;
+  const stand = complete ? { x: FINAL.x, y: FINAL.y + 72 } : pos[robotAt.id];
+  put($('robot'), stand);
+  put($('bubble'), { x: stand.x, y: stand.y - 132 });
+  $('bubble').classList.toggle('far', complete);
+  $('castle').classList.toggle('on', complete);
+  $('islandFinal').classList.toggle('on', complete);
+  document.querySelectorAll('.cloud').forEach(c => c.classList.toggle('gone', complete));
+  document.querySelector('.final').classList.toggle('on', complete);
+  $('finalLock').innerHTML = complete ? ICON.flag + '已完成' : ICON.wait + '未解鎖';
   renderBubble();
-  $('robot').className = active.some(l => l.status === 'wait') ? 'wait'
+  $('robot').className = (complete ? 'far ' : '') + (active.some(l => l.status === 'wait') ? 'wait'
     : active.length && active.every(l => l.status === 'done') ? 'happy'
-    : active.some(l => l.status === 'doing' || l.status === 'adjust') ? 'work' : 'sleep';
+    : active.some(l => l.status === 'doing' || l.status === 'adjust') ? 'work' : 'sleep');
   $('stage').classList.toggle('waiting', plan.levels.some(l => l.status === 'wait'));
 
   // 道路跟著關卡一起滑
