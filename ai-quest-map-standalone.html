@@ -85,6 +85,7 @@
       'bat.title': '已完成 {done} / {total} 個任務', 'bat.titleWait': 'Claude 在等你',
       'notif.title': 'Claude Code 在等你', 'notif.titleName': 'Claude Code 在等你・{name}', 'notif.body': '有一關需要你出手',
       'notif.ping': '闖關地圖：收到連線測試', 'notif.pingBody': '來自 {host}（{platform}）', 'notif.unknown': '未知',
+      'open.code': '由「{project}」的 Claude Code 自動開啟', 'open.codeNoName': '由 Claude Code 自動開啟', 'open.cowork': '由 Cowork 自動開啟', 'open.manual': '由你輸入 /quest-map:open 開啟', 'open.upgraded': '（已自動更新到新版）', 'open.hint': '不想自動開啟：設定環境變數 QUEST_PET_NO_AUTOLAUNCH=1', 'open.notifTitle': '闖關地圖已開啟', 'ui.dismiss': '關閉',
       'win.map': 'AI 任務闖關地圖', 'win.bat': '闖關進度', 'win.edge': '邊緣水位'
     },
     en: {
@@ -150,6 +151,7 @@
       'bat.title': '{done} / {total} tasks done', 'bat.titleWait': 'Claude is waiting for you',
       'notif.title': 'Claude Code is waiting for you', 'notif.titleName': 'Claude Code is waiting for you · {name}', 'notif.body': 'A level needs your attention',
       'notif.ping': 'Quest Map: connection test received', 'notif.pingBody': 'From {host} ({platform})', 'notif.unknown': 'unknown',
+      'open.code': 'Opened automatically by Claude Code in "{project}"', 'open.codeNoName': 'Opened automatically by Claude Code', 'open.cowork': 'Opened automatically by Cowork', 'open.manual': 'Opened by you with /quest-map:open', 'open.upgraded': ' (updated to the new version)', 'open.hint': 'To stop auto-opening: set the environment variable QUEST_PET_NO_AUTOLAUNCH=1', 'open.notifTitle': 'Quest Map opened', 'ui.dismiss': 'Dismiss',
       'win.map': 'AI Quest Map', 'win.bat': 'Quest progress', 'win.edge': 'Edge water level'
     }
   };
@@ -289,6 +291,11 @@ svg.map { position: absolute; inset: 0; z-index: 1; }
 #toast { position: absolute; z-index: 25; top: 78px; left: 50%; transform: translate(-50%, -30px); opacity: 0; pointer-events: none; background: var(--doing); color: #fff; font-weight: 700; font-size: 16px; padding: 10px 22px; border-radius: 24px; box-shadow: 0 6px 18px rgba(31, 111, 235, .4); transition: transform .35s, opacity .35s; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
 #toast.show { transform: translate(-50%, 0); opacity: 1; }
 #toast svg { width: 18px; height: 18px; }
+#opened { position: absolute; z-index: 26; top: 70px; left: 50%; transform: translateX(-50%); max-width: 860px; background: #fff; border: 2px solid var(--doing); border-radius: 16px; padding: 10px 14px 10px 18px; box-shadow: 0 8px 24px rgba(31, 111, 235, .28); display: flex; gap: 14px; align-items: center; }
+#opened[hidden] { display: none; }
+#opened b { display: block; font-size: 16px; }
+#opened small { color: var(--ink-soft); font-size: 12px; }
+#opened button { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1.5px solid var(--todo-edge); background: #fff; font-weight: 600; font-size: 13px; }
 
 /* 已通過的世界 */
 .world { position: absolute; z-index: 4; left: 0; top: 0; width: 150px; margin: -42px 0 0 -75px; padding: 4px 0; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -498,6 +505,7 @@ html.live .demo button, html.live .demo select { -webkit-app-region: no-drag; al
   <div class="hud" id="said"><div class="eyebrow" id="saidLabel">你剛剛說</div><p id="saidText"></p></div>
   <div class="hud" id="card" aria-live="polite"></div>
   <div id="toast" role="status"></div>
+  <div id="opened" role="status" hidden><div><b id="openedText"></b><small id="openedHint"></small></div><button type="button" id="openedClose"></button></div>
 </div>
 </div>
 
@@ -657,7 +665,7 @@ function drawRoads(plan, pos) {
 }
 
 /* ---------- 狀態 ---------- */
-let roadStart = WORLD_POS, follow = true, plan = null, prev = null, selected = null, shown = {}, raf = 0, toastTimer = 0;
+let openedTimer = 0, roadStart = WORLD_POS, follow = true, plan = null, prev = null, selected = null, shown = {}, raf = 0, toastTimer = 0;
 const els = new Map();
 const put = (el, p) => { el.style.transform = `translate(${p.x}px, ${p.y}px)`; };
 const robotLevel = p => ['wait', 'doing', 'adjust'].map(s => p.levels.find(l => l.status === s)).find(Boolean)
@@ -946,6 +954,12 @@ if (pet) {
   $('btnMini').addEventListener('click', () => pet.minimize());
   $('btnClose').addEventListener('click', () => pet.close());
   pet.onPlan(p => { $('subTitle').textContent = p.project ? (p.source === 'chat' ? p.project : `Claude Code・${p.project}`) : T('ui.connecting'); render(p); });
+  pet.onOpened(o => {
+    $('openedText').textContent = o.text; $('openedHint').textContent = o.hint;
+    $('openedClose').textContent = T('ui.dismiss'); $('opened').hidden = false;
+    clearTimeout(openedTimer); openedTimer = setTimeout(() => { $('opened').hidden = true; }, 12000);
+  });
+  $('openedClose').addEventListener('click', () => { $('opened').hidden = true; });
   pet.ready();
 } else {
   demoClub = structuredClone(SCENARIOS.normal); demoShow();

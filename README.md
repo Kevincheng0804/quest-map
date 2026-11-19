@@ -150,11 +150,24 @@ claude plugin install quest-map@ai-quest-map
 - **等你**：水變橘色閃動，把手變成橘色鎖頭「等你 · 對話名稱」，並跳出 Windows 系統通知。
 - **全部完成**：水變綠色，四邊連成一圈。
 - 水柱不會擋住你操作，滑鼠點擊會穿透過去。
+- **看全螢幕影片時**，水位的框會自己變大，蓋滿整個螢幕（平常只蓋到工作列上方）；退出全螢幕就恢復。
 - 點一下把手展開地圖；按住可以拖到別處，放開會自動貼回最近的左緣或右緣。
 
 ---
 
 ## 日常使用
+
+### 地圖自己跳出來的時候
+
+在你電腦上開新的 Claude Code 對話，或 Cowork 需要時，地圖會自己打開。打開時頂端會有一條橫幅，說明是誰開的：
+
+- 「由『專案名稱』的 Claude Code 自動開啟」
+- 「由 Cowork 自動開啟」
+- 「由你輸入 /quest-map:open 開啟」
+
+換新版重開時會加註「（已自動更新到新版）」。橫幅約 12 秒後消失，也可以按「關閉」。如果你把地圖收在螢幕旁邊，地圖打開時改用 Windows 系統通知。只會顯示資料夾名稱，不會顯示完整路徑。
+
+不想讓它自己打開：設定環境變數 `QUEST_PET_NO_AUTOLAUNCH=1`，之後只有輸入 `/quest-map:open` 才會開。
 
 ### 在 Spectra／OpenSpec／Spec Kit 專案使用
 
@@ -242,6 +255,13 @@ Cowork 沒有辦法像 Claude Code 那樣自動同步（實測：Cowork 的 hook
 - 工具跑得很快時，「正在…」只會閃一下，主要看到的是做完後的「改好了…，想下一步」。
 - Cowork 全靠 Claude 記得呼叫 `quest_plan`，沒有「正在修改 style.css」這種自動動作，也偵測不到「等你按同意」，進行中那一步的水位固定從 30% 起跳。
 - 關卡超過 7 個時，地圖只畫小機器人附近的 7 關，其餘用「前面 N 關已走過／後面還有 N 關」表示。
+
+### 全螢幕偵測
+
+- 只支援 Windows。地圖縮到旁邊時，會在背景開一個隱藏的 PowerShell，每 1.5 秒問一次 Windows「有沒有程式正在全螢幕」，沒有安裝或被擋住時就維持原本大小。
+- 偵測有 1～2 秒延遲。影片在另一個螢幕全螢幕時，水位所在螢幕的框也可能變大。
+- 想關掉：設定環境變數 `QUEST_PET_NO_FULLSCREEN_WATCH=1`。
+- 排查：`http://127.0.0.1:47600/stats` 的 `fullscreenWatch` 會顯示偵測有沒有啟動、目前的狀態數字。
 
 ### 規格任務檔
 
@@ -372,7 +392,7 @@ claude plugin marketplace remove ai-quest-map
 
 狀態由 hooks 負責，文字由 Claude 負責。就算 Claude 忘了呼叫 MCP 工具，地圖照樣會動，只是關卡名稱會是待辦清單的原文。
 
-**環境變數**（進階）：`QUEST_PET_PORT` 連接埠、`QUEST_PET_DEBUG` 除錯記錄、`QUEST_PET_NO_AUTOLAUNCH` 不要自動打開地圖、`QUEST_PET_RUNTIME` 桌面元件的安裝位置。
+**環境變數**（進階）：`QUEST_PET_PORT` 連接埠、`QUEST_PET_DEBUG` 除錯記錄、`QUEST_PET_NO_AUTOLAUNCH` 不要自動打開地圖、`QUEST_PET_NO_FULLSCREEN_WATCH` 不偵測全螢幕、`QUEST_PET_RUNTIME` 桌面元件的安裝位置。
 
 ---
 

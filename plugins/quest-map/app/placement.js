@@ -35,4 +35,7 @@ function fitsDisplay(bounds, workAreas, minW = 120, minH = 60) {
   });
 }
 
-module.exports = { snapBattery, placeBattery, fitsDisplay };
+// 邊緣水位的框：平常蓋工作區（不含工作列）；有別的程式全螢幕時，蓋滿整個螢幕
+const edgeBounds = (display, fullscreen) => (fullscreen ? display.bounds : display.workArea);
+
+module.exports = { snapBattery, placeBattery, fitsDisplay, edgeBounds };

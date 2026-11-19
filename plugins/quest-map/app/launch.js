@@ -13,6 +13,9 @@ const { PORT, sharedDir, candidateDirs, findElectron, alive, spawnApp, replaceIf
 const args = process.argv.slice(2);
 const auto = args.includes('--auto');
 const dataArg = args.includes('--data') ? args[args.indexOf('--data') + 1] : '';
+// 這次是誰要開地圖：hook 自動開（哪個專案）或使用者自己輸入 /quest-map:open
+const opener = auto ? { by: 'code', projectDir: process.env.CLAUDE_PROJECT_DIR } : { by: 'manual' };
+let upgraded = false;
 const say = t => { if (!auto) console.log(t); };
 
 function post(urlPath) {
@@ -41,6 +44,7 @@ function post(urlPath) {
     if (st === 'cannot-start') {
       return say('闖關地圖已經開著（版本跟這個外掛不同），但找不到新版的桌面元件，所以沒有換。請先不加 --auto 執行一次 /quest-map:open 完成安裝。');
     }
+    upgraded = true;
     say('已把舊版地圖換成新版。');
   }
   let electron = findElectron(dirs);
@@ -60,6 +64,6 @@ function post(urlPath) {
     electron = findElectron(candidateDirs(dataArg));
     if (!electron) { console.error('找不到下載好的桌面視窗元件。'); process.exit(1); }
   }
-  spawnApp(electron, __dirname);
+  spawnApp(electron, __dirname, upgraded ? { ...opener, upgraded: true } : opener);
   say('闖關地圖已打開。按視窗右上的「縮到旁邊」可以收成螢幕邊緣的水位。');
 })();

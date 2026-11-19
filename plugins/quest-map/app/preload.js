@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('questPet', {
   setLang: v => ipcRenderer.send('pet:set-lang', v),
   onPlan: fn => ipcRenderer.on('plan', (_e, plan) => fn(plan)),
   onSummary: fn => ipcRenderer.on('summary', (_e, s) => fn(s)),
+  onOpened: fn => ipcRenderer.on('opened', (_e, o) => fn(o)),
   onSide: fn => ipcRenderer.on('side', (_e, side) => fn(side)),
   ready: () => ipcRenderer.send('pet:ready'),
   select: id => ipcRenderer.send('pet:select', id),

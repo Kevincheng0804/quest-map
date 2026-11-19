@@ -99,6 +99,8 @@ const TOOLS = [{
 }];
 
 // 沒有專案資料夾（CLAUDE_PROJECT_DIR）就是 Cowork／聊天來源：它們沒有 hooks，也對不到任何 Claude Code 對話。QUEST_PET_CHAT=1／0 可強制
+// 地圖是被誰打開的（顯示給使用者看）：Cowork／聊天，或某個專案的 Claude Code
+const opener = () => (isChat() ? { by: 'cowork' } : { by: 'code', projectDir: process.env.CLAUDE_PROJECT_DIR });
 const isChat = () => (process.env.QUEST_PET_CHAT ? process.env.QUEST_PET_CHAT !== '0' : !process.env.CLAUDE_PROJECT_DIR);
 
 // 對地圖程式送一個請求。回傳 { ok, status, error }：
@@ -119,11 +121,11 @@ async function onRequest(msg) {
   const reply = result => send({ jsonrpc: '2.0', id, result });
   switch (method) {
     case 'initialize':
-      if (!REMOTE) ensureApp().catch(() => {});   // 地圖沒開、元件也裝好了，就在背景打開；不下載、不出聲
+      if (!REMOTE) ensureApp({ opener: opener() }).catch(() => {});   // 地圖沒開、元件也裝好了，就在背景打開；不下載、不出聲
       return reply({
         protocolVersion: params.protocolVersion || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'quest-map', version: '0.14.1' },
+        serverInfo: { name: 'quest-map', version: '0.15.0' },
         instructions: REMOTE ? REMOTE_INSTRUCTIONS : INSTRUCTIONS
       });
     case 'ping': return reply({});
@@ -133,18 +135,18 @@ async function onRequest(msg) {
       const text = t => reply({ content: [{ type: 'text', text: t }] });
       if (REMOTE) return text(params.name === 'quest_ping' ? `連線測試：失敗，這個對話跑在雲端（CLAUDE_CODE_REMOTE）。${REMOTE_MSG}` : REMOTE_MSG);   // 雲端：完全不對 47600 連線
       const closed = '闖關地圖目前沒有開啟（使用者可以用 /quest-map:open 打開）。這不影響工作，請繼續。';
-      const send2 = async path => (await post(path, args)) || ((await ensureApp()) && (await post(path, args)));
+      const send2 = async path => (await post(path, args)) || ((await ensureApp({ opener: opener() })) && (await post(path, args)));
       if (params.name === 'quest_plan') {
         if (!args.goal || !Array.isArray(args.steps)) return reply({ content: [{ type: 'text', text: 'goal 和 steps 都要填，steps 必須是陣列。' }], isError: true });
         let r = await request('POST', '/chatplan', args);
-        if (!r.ok && r.error && await ensureApp()) r = await request('POST', '/chatplan', args);
+        if (!r.ok && r.error && await ensureApp({ opener: opener() })) r = await request('POST', '/chatplan', args);
         if (r.status === 409) return text('這裡不需要 quest_plan：Claude Code 裡的進度會自動同步。請改照 describe_quest 與 quest_progress 的說明做，不要再呼叫 quest_plan。');
         return text(r.ok ? `地圖已同步 ${args.steps.length} 個步驟。之後進度有變動，請再送一次完整清單。` : closed);
       }
       if (params.name === 'quest_ping') {
         const info = { platform: process.platform, host: os.hostname(), node: process.version, cwd: process.cwd() };
         let r = await request('POST', '/ping', info);
-        if (!r.ok && r.error && await ensureApp()) r = await request('POST', '/ping', info);   // 連不上：試著把地圖打開再測一次
+        if (!r.ok && r.error && await ensureApp({ opener: opener() })) r = await request('POST', '/ping', info);   // 連不上：試著把地圖打開再測一次
         const where = `伺服器位置：${info.platform}／${info.host}\n專案資料夾（CLAUDE_PROJECT_DIR）：${process.env.CLAUDE_PROJECT_DIR || '沒有'}`;
         let verdict;
         if (r.ok) verdict = '成功，闖關地圖有收到';

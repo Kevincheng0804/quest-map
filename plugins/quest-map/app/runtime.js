@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
+const { encode: encodeOpener } = require('./opener');
 
 // 這個程式是不是跑在雲端（Claude Code 的雲端工作階段）？雲端的 127.0.0.1 是那台虛擬機自己，連不到使用者電腦上的地圖。
 // QUEST_PET_REMOTE=1／0 可以強制（測試或特殊環境用）
@@ -38,9 +39,12 @@ function alive(timeout = 600) {
   });
 }
 
-function spawnApp(electron, appDir) {
+function spawnApp(electron, appDir, opener) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.QUEST_PET_OPENED_BY;
+  const by = encodeOpener(opener);   // 讓桌面程式知道是誰開的（只有資料夾名稱）
+  if (by) env.QUEST_PET_OPENED_BY = by;
   const extra = (process.env.QUEST_PET_ELECTRON_ARGS || '').split(' ').filter(Boolean);
   const child = spawn(electron, [appDir || __dirname, ...extra], { detached: true, stdio: 'ignore', env });
   child.on('error', () => { /* 元件壞掉或不能執行：不影響呼叫它的程式 */ });
@@ -82,20 +86,21 @@ async function replaceIfOld({ canStart = !!findElectron(), version = myVersion()
 
 // 只在已經裝好元件時才啟動；不下載、不出聲。冷卻時間內不重試。
 let lastTry = 0;
-async function ensureApp({ cooldown = 60000, wait = 8000 } = {}) {
+async function ensureApp({ cooldown = 60000, wait = 8000, opener } = {}) {
   if (process.env.QUEST_PET_NO_AUTOLAUNCH || isRemote()) return false;
+  let upgraded = false;
   if (await alive()) {
     // 開著的是舊版：換成新版（同樣受冷卻限制，不會反覆重開）
     if (Date.now() - lastTry < cooldown) return true;
     if ((await replaceIfOld()) !== 'replaced') return true;
-    lastTry = Date.now();
+    lastTry = Date.now(); upgraded = true;
   } else {
     if (Date.now() - lastTry < cooldown) return false;
     lastTry = Date.now();
   }
   const electron = findElectron();
   if (!electron) return false;
-  spawnApp(electron, __dirname);
+  spawnApp(electron, __dirname, opener && upgraded ? { ...opener, upgraded: true } : opener);
   for (const end = Date.now() + wait; Date.now() < end;) {
     await new Promise(r => setTimeout(r, 400));
     if (await alive()) return true;

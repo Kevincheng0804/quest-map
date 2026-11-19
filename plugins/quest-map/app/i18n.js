@@ -79,6 +79,7 @@
       'bat.title': '已完成 {done} / {total} 個任務', 'bat.titleWait': 'Claude 在等你',
       'notif.title': 'Claude Code 在等你', 'notif.titleName': 'Claude Code 在等你・{name}', 'notif.body': '有一關需要你出手',
       'notif.ping': '闖關地圖：收到連線測試', 'notif.pingBody': '來自 {host}（{platform}）', 'notif.unknown': '未知',
+      'open.code': '由「{project}」的 Claude Code 自動開啟', 'open.codeNoName': '由 Claude Code 自動開啟', 'open.cowork': '由 Cowork 自動開啟', 'open.manual': '由你輸入 /quest-map:open 開啟', 'open.upgraded': '（已自動更新到新版）', 'open.hint': '不想自動開啟：設定環境變數 QUEST_PET_NO_AUTOLAUNCH=1', 'open.notifTitle': '闖關地圖已開啟', 'ui.dismiss': '關閉',
       'win.map': 'AI 任務闖關地圖', 'win.bat': '闖關進度', 'win.edge': '邊緣水位'
     },
     en: {
@@ -144,6 +145,7 @@
       'bat.title': '{done} / {total} tasks done', 'bat.titleWait': 'Claude is waiting for you',
       'notif.title': 'Claude Code is waiting for you', 'notif.titleName': 'Claude Code is waiting for you · {name}', 'notif.body': 'A level needs your attention',
       'notif.ping': 'Quest Map: connection test received', 'notif.pingBody': 'From {host} ({platform})', 'notif.unknown': 'unknown',
+      'open.code': 'Opened automatically by Claude Code in "{project}"', 'open.codeNoName': 'Opened automatically by Claude Code', 'open.cowork': 'Opened automatically by Cowork', 'open.manual': 'Opened by you with /quest-map:open', 'open.upgraded': ' (updated to the new version)', 'open.hint': 'To stop auto-opening: set the environment variable QUEST_PET_NO_AUTOLAUNCH=1', 'open.notifTitle': 'Quest Map opened', 'ui.dismiss': 'Dismiss',
       'win.map': 'AI Quest Map', 'win.bat': 'Quest progress', 'win.edge': 'Edge water level'
     }
   };
