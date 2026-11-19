@@ -20,6 +20,7 @@ const INSTRUCTIONS = [
   '1. 有待辦清單時：每次建立清單，或清單新增、改寫項目之後，呼叫一次 describe_quest，替每個項目補上白話名稱，並把它拆成 2 到 5 個小步驟（steps）。',
   '2. 沒有待辦清單的小修改也要補：開始動手前，先呼叫一次 describe_quest（task 填 "1"，不要為此另外建立待辦清單），用一句白話說明你要改的是什麼功能，例如 title「把按鈕改紅色」、plain「把送出按鈕的顏色改成紅色，讓人更容易看到」。小到一兩步的修改不用給 steps。如果使用者只是在問問題、不需要你動手改東西，就不用呼叫。',
   '3. 做任務的過程中，每做完一個小步驟就呼叫一次 quest_progress，回報這個任務目前做完幾步。這同時幫你自己記住做到哪裡。',
+  '4. 需要使用者自己動手的事（更新外掛、實際操作測試、貼資料、做決定、到別的網站設定），不要只在文字裡條列，也要放進待辦清單，項目開頭加「【你來做】」，輪到他時標成進行中，並用 describe_quest 的 steps 列出他要做的具體動作。然後停下來把結果交給他，不要自己標完成；他回來說做好了，你先驗證確實完成，才把那項標成完成。地圖不會偵測使用者做到哪。',
   '白話的意思是讓沒寫過程式的人看得懂：寫「做出表單畫面」，不要寫「建立 form.html」；寫「把按鈕改紅色」，不要寫「修改 .send 的 background」。技術細節放在 tech 欄位。使用者用什麼語言，你就用什麼語言。',
   '工具失敗或地圖沒開都不影響你的工作，不用向使用者提起，繼續做事即可。'
 ].join('\n');
@@ -125,7 +126,7 @@ async function onRequest(msg) {
       return reply({
         protocolVersion: params.protocolVersion || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'quest-map', version: '0.15.0' },
+        serverInfo: { name: 'quest-map', version: '0.16.0' },
         instructions: REMOTE ? REMOTE_INSTRUCTIONS : INSTRUCTIONS
       });
     case 'ping': return reply({});

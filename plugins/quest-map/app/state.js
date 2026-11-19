@@ -75,6 +75,9 @@ function summaryOf(msg) {
 }
 const MAP = { pending: 'todo', in_progress: 'doing', completed: 'done', deleted: 'cancel' };
 
+// 要請使用者動手的事：待辦項目開頭加 【你來做】（或 [YOU]），地圖畫成只有使用者打得開的門，做完由 Claude 驗證後才標完成
+const USER_MARK = /^\s*(?:【\s*(?:你來做|你要做|等你)\s*】|\[\s*(?:you|user|你來做)\s*\])\s*/i;
+const splitUser = t => { const s = String(t == null ? '' : t); return USER_MARK.test(s) ? { title: s.replace(USER_MARK, ''), user: true } : { title: s, user: false }; };
 // 還沒被改過的預設文字，顯示時跟著目前語言走（切換語言後待命畫面也會換）
 const dflt = (v, key) => all(key).includes(v) ? tr(key) : v;
 function createSession() {
@@ -88,10 +91,11 @@ function createSession() {
     activity: null, touched: new Map(), summary: ''   // 現在在做什麼、這次動過的檔案（依關卡）、收尾的一句話
   };
   // Claude 透過 MCP 工具補上的白話名稱：用待辦原文或任務編號對應
-  const norm = t => String(t || '').trim().toLowerCase();
+  const norm = t => splitUser(t).title.trim().toLowerCase();   // 比對時不看「你來做」標記
   const disp = l => {
     const b = S.labels.get(norm(l.title)) || S.labels.get(l.id);
     const out = b ? { ...l, title: b.title || l.title, plain: b.plain || l.plain, tech: b.tech || l.tech } : { ...l };
+    if (l.user && (out.status === 'doing' || out.status === 'adjust')) { out.status = 'wait'; out.reason = tr('reason.user'); }   // 輪到使用者：不用偵測，等他回來說做好了、Claude 驗證
     const st = stepsOf(l);
     if (st) out.steps = st.names.map((title, i) => ({ title, done: l.status === 'done' || i < st.done }));
     return out;
@@ -178,20 +182,22 @@ function createSession() {
   function onTodos(list) {
     if (!Array.isArray(list)) return;
     clearWait();
-    if (allDone() && list.length && !list.some(t => S.levels.some(l => l.title === (t.content || t.subject)))) archive();
+    const nameOf = t => splitUser(t.content || t.subject || '').title;
+    if (allDone() && list.length && !list.some(t => S.levels.some(l => l.title === nameOf(t)))) archive();
     const old = S.levels, oldActive = real(), hadPlan = oldActive.length > 0;
     const byTitle = new Map(oldActive.map(l => [l.title, l]));
-    const newTitles = new Set(list.map(t => t.content || t.subject || ''));
+    const newTitles = new Set(list.map(t => nameOf(t)));
     const used = new Set();
     let added = 0, rework = 0, cancelled = 0;
     const next = list.map((t, i) => {
-      const title = t.content || t.subject || tr('step.item', { n: i + 1 });
+      const title = nameOf(t) || tr('step.item', { n: i + 1 }), isUser = t.user || splitUser(t.content || t.subject).user;
       let o = byTitle.get(title);
       // 只是改措辭：同一個位置、清單一樣長，就當同一關，安靜更新
       if (!o && oldActive.length === list.length && oldActive[i] && !newTitles.has(oldActive[i].title) && alike(oldActive[i].title, title)) o = oldActive[i];
       if (o) used.add(o.id);
       const status = nextStatus(o, t.status);
       const lv = { id: o ? o.id : 't' + (++S.seq), title, status, plain: t.description || t.activeForm || title, tech: tr(S.chat ? 'tech.chat' : 'tech.code', { title }) };
+      if (isUser) lv.user = true;
       if (o && o.isNew) lv.isNew = true;
       if (o && o.reason && status !== 'done') lv.reason = o.reason;
       if (!o && hadPlan) { lv.isNew = true; lv.reason = tr('reason.new', { quote: quote() }); added++; }
@@ -224,8 +230,9 @@ function createSession() {
     let id = findId(resp);
     if (id && /^\d+$/.test(id)) S.taskSeq = Math.max(S.taskSeq, +id); else if (!id) id = String(++S.taskSeq);
     if (S.levels.some(l => l.id === 'k' + id)) return;
-    const title = input.subject || input.content || tr('step.item', { n: id });
-    const lv = { id: 'k' + id, title, status: 'todo', plain: input.description || input.activeForm || title, tech: tr('tech.task', { id, title }) };
+    const sp = splitUser(input.subject || input.content || '');
+    const title = sp.title || tr('step.item', { n: id });
+    const lv = { id: 'k' + id, title, ...(sp.user ? { user: true } : {}), status: 'todo', plain: input.description || input.activeForm || title, tech: tr('tech.task', { id, title }) };
     if (started) { lv.isNew = true; lv.reason = tr('reason.new', { quote: quote() }); setToast(1, 0, 0); }
     S.levels.push(lv);
   }
@@ -311,7 +318,7 @@ function createSession() {
       // 還沒看到這個項目（工具比清單早到）：先用它給的編號或原文記著
       const at = lv ? (lv.id.startsWith('k') || lv.id.startsWith('solo') ? lv.id : norm(lv.title)) : (/^\d+$/.test(key) ? 'k' + key : key);
       const old = S.labels.get(at) || {};
-      S.labels.set(at, { title: (x.title && short(x.title, 16)) || old.title, plain: x.plain || old.plain, tech: x.tech || old.tech, steps: steps && steps.length ? steps : old.steps });
+      S.labels.set(at, { title: (x.title && short(splitUser(x.title).title, 16)) || old.title, plain: x.plain || old.plain, tech: x.tech || old.tech, steps: steps && steps.length ? steps : old.steps });
     });
     say();
     return true;
@@ -403,7 +410,10 @@ function createSession() {
       const target = key === 'solo' ? levels[0] : (levels.find(l => l.id === key) || act.find(l => l.status === 'todo') || act[act.length - 1]);
       if (target && list.length) target.touched = [...(target.touched || []), ...list.map(x => ({ ...x }))];
     }
-    const waiting = !!S.waitingFor;
+    // 要使用者動手的關：沒有權限提示在等時，用它當「在等你」的內容
+    const userWait = !S.waitingFor ? levels.find(l => l.user && l.status === 'wait') : null;
+    const waitingFor = S.waitingFor || (userWait ? tr('wait.user', { title: userWait.title }) : null);
+    const waiting = !!waitingFor;
     const cur = working(), curName = cur && disp(cur).title;
     const now = S.activity ? tr(S.activity.done ? 'now.done' : 'now.doing', { text: S.activity.text }) : '';
     const label = curName || (!S.levels.length && S.prompted && S.labels.has('solo' + S.round) ? levels[0].title : '');
@@ -415,7 +425,7 @@ function createSession() {
       source: S.chat ? 'chat' : 'code',
       userSaid: S.userSaid || tr('said.none'), aiSays: dflt(aiSays, 'says.idle'), activity: waiting || !S.activity ? null : (S.activity.done ? { text: S.activity.text, done: true } : { text: S.activity.text }),
       summary: complete ? S.summary : '', levels,
-      waitingFor: S.waitingFor, waitSince: S.waitingFor ? S.waitSince : null, choice: null, toast: S.toast, project: S.project, cup: cupFill()
+      waitingFor, waitSince: S.waitingFor ? S.waitSince : null, waitKind: S.waitingFor ? 'approval' : userWait ? 'user' : null, choice: null, toast: S.toast, project: S.project, cup: cupFill()
     };
     return p;
   }
@@ -459,7 +469,7 @@ function createSession() {
   function applyPlan(d) {
     startChat(d.goal);
     const steps = Array.isArray(d.steps) ? d.steps : [];
-    const todos = steps.filter(x => x && x.title).map(x => ({ content: short(x.title, 24), status: STEP_STATUS[x.status] || 'pending', description: x.plain }));
+    const todos = steps.filter(x => x && x.title).map(x => { const sp = splitUser(x.title); return { content: short(sp.title, 24), user: sp.user, status: STEP_STATUS[x.status] || 'pending', description: x.plain }; });
     if (todos.length) onTodos(todos); else clearWait();
     if (d.world) S.world = short(d.world, 12);
     if (d.waiting_for) setWait(short(d.waiting_for, 120));

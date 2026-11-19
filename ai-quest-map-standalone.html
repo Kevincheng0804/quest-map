@@ -86,6 +86,7 @@
       'notif.title': 'Claude Code 在等你', 'notif.titleName': 'Claude Code 在等你・{name}', 'notif.body': '有一關需要你出手',
       'notif.ping': '闖關地圖：收到連線測試', 'notif.pingBody': '來自 {host}（{platform}）', 'notif.unknown': '未知',
       'open.code': '由「{project}」的 Claude Code 自動開啟', 'open.codeNoName': '由 Claude Code 自動開啟', 'open.cowork': '由 Cowork 自動開啟', 'open.manual': '由你輸入 /quest-map:open 開啟', 'open.upgraded': '（已自動更新到新版）', 'open.hint': '不想自動開啟：設定環境變數 QUEST_PET_NO_AUTOLAUNCH=1', 'open.notifTitle': '闖關地圖已開啟', 'ui.dismiss': '關閉',
+      'status.user': '要你動手', 'reason.user': '要你本人動手：做完回來告訴 Claude，它驗證過才算過關', 'wait.user': '請你做：{title}（做完回來告訴 Claude）', 'ui.userHead': '要你動手', 'ui.userHint': '做完回到對話告訴 Claude，它驗證通過這一關才會過',
       'win.map': 'AI 任務闖關地圖', 'win.bat': '闖關進度', 'win.edge': '邊緣水位'
     },
     en: {
@@ -152,6 +153,7 @@
       'notif.title': 'Claude Code is waiting for you', 'notif.titleName': 'Claude Code is waiting for you · {name}', 'notif.body': 'A level needs your attention',
       'notif.ping': 'Quest Map: connection test received', 'notif.pingBody': 'From {host} ({platform})', 'notif.unknown': 'unknown',
       'open.code': 'Opened automatically by Claude Code in "{project}"', 'open.codeNoName': 'Opened automatically by Claude Code', 'open.cowork': 'Opened automatically by Cowork', 'open.manual': 'Opened by you with /quest-map:open', 'open.upgraded': ' (updated to the new version)', 'open.hint': 'To stop auto-opening: set the environment variable QUEST_PET_NO_AUTOLAUNCH=1', 'open.notifTitle': 'Quest Map opened', 'ui.dismiss': 'Dismiss',
+      'status.user': 'Your turn', 'reason.user': 'This one is for you: tell Claude when it is done, and it counts once Claude has checked it', 'wait.user': 'Please do: {title} (then tell Claude)', 'ui.userHead': 'Your turn', 'ui.userHint': 'When done, tell Claude in the chat. This level clears once Claude has checked it',
       'win.map': 'AI Quest Map', 'win.bat': 'Quest progress', 'win.edge': 'Edge water level'
     }
   };
@@ -814,7 +816,7 @@ function renderBubble() {
   const b = $('bub');
   if (plan.waitingFor) {
     b.className = 'bub wait';
-    b.innerHTML = `<div class="head">${ICON.wait}${esc(T('ui.waitHead'))}</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
+    b.innerHTML = `<div class="head">${ICON.wait}${esc(T(plan.waitKind === 'user' ? 'ui.userHead' : 'ui.waitHead'))}</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(plan.waitKind === 'user' ? T('ui.userHint') : waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
     if (!pet) $('keyBtn').addEventListener('click', () => {
       render({ ...plan, waitingFor: null, toast: null, aiSays: '收到鑰匙了！門打開，繼續前進。',
         levels: plan.levels.map(l => l.status === 'wait' ? { ...l, status: 'doing', reason: '門已打開：你交出了鑰匙' } : l) }, { quiet: true });
@@ -846,13 +848,13 @@ function renderCard() {
   const nowHtml = working ? `<p class="now">${ICON.doing}<span>${esc(T('ui.nowLine', { when: plan.activity.done ? T('ui.nowJust') : T('ui.nowNow'), text: plan.activity.text }))}</span></p>` : '';
   const touchedHtml = tl.length ? `<div class="tlabel">${esc(T('ui.touched'))}</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(T('ui.fileLine', { verb: t.verb, name: t.name }))}</span></li>`).join('')}${tl.length > 6 ? `<li><span>${esc(T('ui.moreFiles', { n: tl.length - 6 }))}</span></li>` : ''}</ul>` : '';
   $('card').innerHTML = `
-    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${esc(num ? T('ui.cardNum', { n: num }) : T('ui.offRoad'))}</span></div>
+    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${esc(l.user && l.status === 'wait' ? T('status.user') : STATUS[l.status])}</span><span class="eyebrow">${esc(num ? T('ui.cardNum', { n: num }) : T('ui.offRoad'))}</span></div>
     <h2>${esc(l.title)}</h2>
     <p>${esc(l.plain)}</p>
     ${nowHtml}${touchedHtml}
     ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>${esc(T('ui.whyWait'))}</b>${esc(plan.waitingFor)}</p>` : ''}
     ${l.steps && l.steps.length ? `<ul class="steps">${l.steps.map(st => `<li class="${st.done ? 'ok' : ''}">${st.done ? ICON.done : ICON.todo}<span>${esc(st.title)}</span></li>`).join('')}</ul>` : ''}
-    ${l.reason ? `<p class="why"><b>${esc(T('ui.whyChanged'))}</b>${esc(l.reason)}</p>` : ''}
+    ${l.reason && !(l.user && l.status === 'wait') ? `<p class="why"><b>${esc(T('ui.whyChanged'))}</b>${esc(l.reason)}</p>` : ''}
     <p class="tech"><span>${esc(T('ui.tech'))}</span>${esc(l.tech)}</p>`;
 }
 

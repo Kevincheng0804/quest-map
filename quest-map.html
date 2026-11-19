@@ -632,7 +632,7 @@ function renderBubble() {
   const b = $('bub');
   if (plan.waitingFor) {
     b.className = 'bub wait';
-    b.innerHTML = `<div class="head">${ICON.wait}${esc(T('ui.waitHead'))}</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
+    b.innerHTML = `<div class="head">${ICON.wait}${esc(T(plan.waitKind === 'user' ? 'ui.userHead' : 'ui.waitHead'))}</div><p>${esc(plan.waitingFor)}</p><p class="waitage" id="waitAge">${esc(plan.waitKind === 'user' ? T('ui.userHint') : waitAgeText(plan.waitSince))}</p>${pet ? '' : '<div class="acts"><button type="button" id="keyBtn">我貼好了，交出鑰匙</button></div>'}`;
     if (!pet) $('keyBtn').addEventListener('click', () => {
       render({ ...plan, waitingFor: null, toast: null, aiSays: '收到鑰匙了！門打開，繼續前進。',
         levels: plan.levels.map(l => l.status === 'wait' ? { ...l, status: 'doing', reason: '門已打開：你交出了鑰匙' } : l) }, { quiet: true });
@@ -664,13 +664,13 @@ function renderCard() {
   const nowHtml = working ? `<p class="now">${ICON.doing}<span>${esc(T('ui.nowLine', { when: plan.activity.done ? T('ui.nowJust') : T('ui.nowNow'), text: plan.activity.text }))}</span></p>` : '';
   const touchedHtml = tl.length ? `<div class="tlabel">${esc(T('ui.touched'))}</div><ul class="steps">${tl.slice(0, 6).map(t => `<li class="ch">${ICON.adjust}<span>${esc(T('ui.fileLine', { verb: t.verb, name: t.name }))}</span></li>`).join('')}${tl.length > 6 ? `<li><span>${esc(T('ui.moreFiles', { n: tl.length - 6 }))}</span></li>` : ''}</ul>` : '';
   $('card').innerHTML = `
-    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${STATUS[l.status]}</span><span class="eyebrow">${esc(num ? T('ui.cardNum', { n: num }) : T('ui.offRoad'))}</span></div>
+    <div class="card-top"><span class="pill ${l.status}">${ICON[l.status]}${esc(l.user && l.status === 'wait' ? T('status.user') : STATUS[l.status])}</span><span class="eyebrow">${esc(num ? T('ui.cardNum', { n: num }) : T('ui.offRoad'))}</span></div>
     <h2>${esc(l.title)}</h2>
     <p>${esc(l.plain)}</p>
     ${nowHtml}${touchedHtml}
     ${l.status === 'wait' && plan.waitingFor ? `<p class="why wait"><b>${esc(T('ui.whyWait'))}</b>${esc(plan.waitingFor)}</p>` : ''}
     ${l.steps && l.steps.length ? `<ul class="steps">${l.steps.map(st => `<li class="${st.done ? 'ok' : ''}">${st.done ? ICON.done : ICON.todo}<span>${esc(st.title)}</span></li>`).join('')}</ul>` : ''}
-    ${l.reason ? `<p class="why"><b>${esc(T('ui.whyChanged'))}</b>${esc(l.reason)}</p>` : ''}
+    ${l.reason && !(l.user && l.status === 'wait') ? `<p class="why"><b>${esc(T('ui.whyChanged'))}</b>${esc(l.reason)}</p>` : ''}
     <p class="tech"><span>${esc(T('ui.tech'))}</span>${esc(l.tech)}</p>`;
 }
 

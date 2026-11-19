@@ -1095,3 +1095,55 @@ test('只有 SessionStart 時回到待命畫面；在等你的對話就算還沒
   assert.equal(hub.plan().sessions.length, 1);
   assert.equal(hub.plan().sessions[0].waiting, true);
 });
+
+test('你來做：標記的項目畫成橘色的門，並列出清單；Claude 驗證標完成才通關', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '更新外掛然後測試' });
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [
+    { content: '修好程式', status: 'completed' }, { content: '【你來做】更新外掛', status: 'in_progress' }, { content: '【你來做】測試全螢幕', status: 'pending' }] } });
+  s.describe({ levels: [{ task: '【你來做】更新外掛', plain: '你的電腦要裝新版', steps: ['關掉舊地圖', '執行更新指令'] }] });
+  let p = s.plan();
+  assert.deepEqual(p.levels.map(l => [l.title, l.status]), [['修好程式', 'done'], ['更新外掛', 'wait'], ['測試全螢幕', 'todo']]);
+  assert.deepEqual(p.levels[1].steps.map(x => x.title), ['關掉舊地圖', '執行更新指令']);
+  assert.equal(p.levels[1].reason, '要你本人動手：做完回來告訴 Claude，它驗證過才算過關');
+  assert.equal(p.waitKind, 'user');
+  assert.match(p.waitingFor, /請你做：更新外掛/);
+  assert.equal(p.waitSince, null, '不計時、不偵測');
+  assert.equal(summarize(p).waiting, true, '邊緣水位和把手也變成等你');
+  // 工具動靜不會把它解除；Stop 也不會讓它通關
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'ls' } });
+  s.handle({ hook_event_name: 'Stop', last_assistant_message: '請你先更新外掛，做好跟我說。' });
+  p = s.plan(); assert.equal(p.levels[1].status, 'wait');
+  // 使用者回報、Claude 驗證後標完成，下一件才輪到
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [
+    { content: '修好程式', status: 'completed' }, { content: '【你來做】更新外掛', status: 'completed' }, { content: '【你來做】測試全螢幕', status: 'in_progress' }] } });
+  p = s.plan();
+  assert.deepEqual(p.levels.map(l => l.status), ['done', 'done', 'wait']);
+  assert.match(p.waitingFor, /測試全螢幕/);
+});
+
+test('你來做：沒有標記的項目不受影響；英文標記 [YOU] 與 quest_plan 步驟也認得', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: 'x' });
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '一般項目', status: 'in_progress' }] } });
+  assert.equal(s.plan().waitKind, null);
+  assert.equal(s.plan().levels[0].status, 'doing');
+  const c = createSession();
+  c.startChat('任務');
+  c.applyPlan({ goal: '任務', steps: [{ title: '[YOU] Update the plugin', status: 'in_progress' }, { title: 'Check it', status: 'pending' }] });
+  const p = c.plan();
+  assert.equal(p.levels[0].title, 'Update the plugin');
+  assert.equal(p.levels[0].status, 'wait');
+  assert.equal(p.waitKind, 'user');
+});
+
+test('你來做：TaskCreate 的項目也認得，權限提示優先於它', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: 'x' });
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskCreate', tool_input: { subject: '【你來做】貼資料', description: '把設定貼回來' }, tool_response: { id: '1' } });
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'in_progress' } });
+  let p = s.plan();
+  assert.equal(p.levels[0].title, '貼資料'); assert.equal(p.levels[0].status, 'wait'); assert.equal(p.waitKind, 'user');
+  s.handle({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
+  p = s.plan(); assert.equal(p.waitKind, 'approval');
+});
