@@ -22,11 +22,14 @@ const INSTRUCTIONS = [
   '2. 沒有待辦清單的小修改也要補：開始動手前，先呼叫一次 describe_quest（task 填 "1"，不要為此另外建立待辦清單），用一句白話說明你要改的是什麼功能，例如 title「把按鈕改紅色」、plain「把送出按鈕的顏色改成紅色，讓人更容易看到」。小到一兩步的修改不用給 steps。如果使用者只是在問問題、不需要你動手改東西，就不用呼叫。',
   '3. 做任務的過程中，每做完一個小步驟就呼叫一次 quest_progress，回報這個任務目前做完幾步。這同時幫你自己記住做到哪裡。',
   '4. 需要使用者自己動手的事（更新外掛、實際操作測試、貼資料、做決定、到別的網站設定），不要只在文字裡條列，也要放進待辦清單，項目開頭加「【你來做】」，輪到他時標成進行中，並用 describe_quest 的 steps 列出他要做的具體動作。然後停下來把結果交給他，不要自己標完成；他回來說做好了，你先驗證確實完成，才把那項標成完成。地圖不會偵測使用者做到哪。',
+  '5. 任務進行中使用者又說了話：跟任務有關（改需求、補充、回報做好了）就在下一次呼叫 describe_quest 或 quest_plan 時帶 said，把這句話跟任務有關的部分濃縮成一句白話；只是閒聊或問別的事，不用為此呼叫工具（地圖會保持原來的「你剛剛說」），要呼叫時帶空字串。',
   '白話的意思是讓沒寫過程式的人看得懂：寫「做出表單畫面」，不要寫「建立 form.html」；寫「把按鈕改紅色」，不要寫「修改 .send 的 background」。技術細節放在 tech 欄位。使用者用什麼語言，你就用什麼語言。',
   '工具失敗或地圖沒開都不影響你的工作，不用向使用者提起，繼續做事即可。'
 ].join('\n');
 
 const TASK_REF = '對應哪個待辦項目：TaskCreate 的任務編號（例如 "3"），或 TodoWrite 項目的原文（一字不差），或它在清單中的第幾項（例如 "2"）。沒有待辦清單的單一任務填 "1"。';
+
+const SAID = { type: 'string', description: '使用者最新這句話裡跟任務有關的部分，濃縮成一句白話（30 字內），會顯示在地圖的「你剛剛說」。他這句只是閒聊或跟任務無關，就填空字串 ""，地圖會保持原樣。沒有新的話就省略。' };
 
 const TOOLS = [{
   name: 'describe_quest',
@@ -36,6 +39,7 @@ const TOOLS = [{
     properties: {
       world: { type: 'string', description: '這一輪工作的世界名稱，有點遊戲感、8 個字以內，例如「報名表單森林」。第一次呼叫時提供。' },
       goal: { type: 'string', description: '這一輪要完成什麼，一句白話，例如「做出報名表單」。' },
+      said: SAID,
       finalGoal: { type: 'string', description: '整個任務的最終目標，6 個字以內，例如「上線城堡」。知道時才提供。' },
       levels: {
         type: 'array',
@@ -62,6 +66,7 @@ const TOOLS = [{
     type: 'object',
     properties: {
       goal: { type: 'string', description: '這個任務要完成什麼，一句白話，例如「建立一個打招呼的檔案」。' },
+      said: SAID,
       task_id: { type: 'string', description: '同一個任務每次都填同樣的短代號（英文小寫，例如 "hello"），不同任務用不同代號。省略時用 "main"。' },
       world: { type: 'string', description: '這個任務的世界名稱，有點遊戲感、8 個字以內，例如「打招呼小村」。第一次呼叫時提供。' },
       steps: {
@@ -127,7 +132,7 @@ async function onRequest(msg) {
       return reply({
         protocolVersion: params.protocolVersion || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'quest-map', version: '0.16.3' },
+        serverInfo: { name: 'quest-map', version: '0.17.0' },
         instructions: REMOTE ? REMOTE_INSTRUCTIONS : INSTRUCTIONS
       });
     case 'ping': return reply({});

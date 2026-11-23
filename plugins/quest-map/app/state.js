@@ -87,6 +87,7 @@ function createSession() {
     userSaid: '', aiSays: tr('says.idle'),
     levels: [], solo: 'todo', prompted: false, waitingFor: null, waitId: null, waitPrev: null,
     project: '', seq: 0, taskSeq: 0, toast: null, labels: new Map(), prog: new Map(),
+    pendingSaid: null,   // 計畫進行中、還沒被認領的使用者的話
     promptSeq: 0,   // 使用者說過幾句話（判斷「你來做」的項目有沒有等到使用者回報）
     waitSince: null,   // 從什麼時候開始在等使用者（毫秒時間）
     chat: false,   // 來自 Cowork／聊天（沒有 hooks），進度全靠 Claude 回報
@@ -114,7 +115,7 @@ function createSession() {
   const real = () => S.levels.filter(l => l.status !== 'cancel');
   // 沒有待辦清單的小任務也當成一關，Claude 補的白話名稱和小步驟就掛在它身上
   const soloLv = () => ({ id: 'solo' + S.round, title: tr('level.solo'), status: S.solo });
-  const quote = () => S.chat ? tr('quote.chat') : (S.userSaid ? tr('quote.said', { said: S.userSaid }) : tr('quote.plain'));
+  const quote = () => S.chat ? tr('quote.chat') : ((S.pendingSaid || S.userSaid) ? tr('quote.said', { said: S.pendingSaid || S.userSaid }) : tr('quote.plain'));
   const working = () => S.levels.find(l => l.status === 'doing') || S.levels.find(l => l.status === 'adjust');
 
   function clearWait() {
@@ -139,6 +140,7 @@ function createSession() {
     S.specBound = false; S.bound = null;
     const r = real();
     S.pastWorlds.push({ name: S.world, summary: r.length ? r.map(l => disp(l).title).join(tr('sep')) : S.goal });
+    S.pendingSaid = null;
     S.round++; S.levels = []; S.solo = 'doing';
     S.world = short(S.userSaid, 9) || tr('world.round', { n: S.round }); S.goal = short(S.userSaid, 36) || S.world;
   }
@@ -159,6 +161,7 @@ function createSession() {
   function setToast(added, cancelled, rework) {
     const parts = [added && tr('toast.added', { n: added }), cancelled && tr('toast.cancelled', { n: cancelled }), rework && tr('toast.rework', { n: rework })].filter(Boolean);
     if (parts.length) S.toast = tr('toast.prefix') + parts.join(tr('sep.toast'));
+    if (parts.length && S.pendingSaid) { S.userSaid = S.pendingSaid; S.pendingSaid = null; }   // 這句話改了計畫：顯然跟任務有關
   }
   const nextStatus = (old, raw) => {
     const st = MAP[raw] || 'todo';
@@ -171,7 +174,10 @@ function createSession() {
     const text = cleanPrompt(raw);
     clearWait();
     S.activity = null; S.touched.clear(); S.summary = '';
-    S.userSaid = short(text, 60);
+    // 計畫進行中：這句話先「待定」，不蓋掉「你剛剛說」。等它讓計畫變動、或 Claude 帶 said 認領，才算跟任務有關
+    const inPlan = S.prompted && S.levels.length > 0 && !allDone();
+    if (inPlan) S.pendingSaid = short(text, 60);
+    else { S.userSaid = short(text, 60); S.pendingSaid = null; }
     S.levels.forEach(l => { delete l.isNew; });
     const fresh = !S.prompted;
     const finished = allDone() || (S.levels.length === 0 && S.prompted && S.solo === 'done');
@@ -276,6 +282,7 @@ function createSession() {
     }
   }
   function onStop(e) {
+    S.pendingSaid = null;   // 這一輪都沒被認領的話，不是任務的一部分
     clearWait();
     S.activity = null;
     const asked = /[?？]\s*$/.test(String(e.last_assistant_message || '').trim());
@@ -320,7 +327,15 @@ function createSession() {
     return S.levels.find(l => norm(l.title) === key || norm(disp(l).title) === key) || null;
   }
 
+  // Claude 認領這句話：非空就顯示它濃縮過的版本；空字串表示只是閒聊，丟掉
+  function applySaid(x) {
+    if (x === undefined || x === null) return;
+    const s = String(x).trim();
+    if (s) S.userSaid = short(s, 60);
+    S.pendingSaid = null;
+  }
   function describe(d) {
+    applySaid(d.said);
     if (d.world) S.world = short(d.world, 12);
     if (d.goal) S.goal = short(d.goal, 40);
     if (d.finalGoal) S.finalGoal = short(d.finalGoal, 12);
@@ -483,6 +498,7 @@ function createSession() {
   // 每次都收到整份清單，沿用 TodoWrite 的比對邏輯：新增、拆除、回頭修、完成判定都不用另外寫
   // asCode：Claude Code 的對話也可以用 quest_plan（例如它沒有待辦清單工具時）。但同一輪只認一個來源：已經用待辦清單或規格任務檔，就不收
   function applyPlan(d, asCode) {
+    applySaid(d.said);
     if (asCode) {
       if (S.bound === 'todo' || S.bound === 'spec') return false;
       S.bound = 'quest';

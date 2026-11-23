@@ -1216,3 +1216,50 @@ test('quest_plan：已經用待辦清單的對話不收；找不到對話也不�
   assert.deepEqual(hub.plan().levels.map(l => l.title), ['甲']);
   assert.equal(createHub().chatPlan({ goal: 'g', steps: [], project_dir: '/nowhere', chat: false }), false);
 });
+
+const inPlan = () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '幫我做報名表單' });
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '欄位', status: 'completed' }, { content: '畫面', status: 'in_progress' }] } });
+  return s;
+};
+
+test('你剛剛說：計畫進行中的閒聊不會蓋掉任務要求', () => {
+  const s = inPlan();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '這個字是什麼意思？' });
+  assert.equal(s.plan().userSaid, '幫我做報名表單');
+  s.handle({ hook_event_name: 'Stop', last_assistant_message: '它的意思是……' });
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '謝謝' });
+  assert.equal(s.plan().userSaid, '幫我做報名表單', 'Stop 後待定的話被丟掉，不會殘留');
+});
+
+test('你剛剛說：這句話讓計畫新增關卡，就升為「你剛剛說」', () => {
+  const s = inPlan();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '再加一個上傳大頭照' });
+  assert.equal(s.plan().userSaid, '幫我做報名表單');
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '欄位', status: 'completed' }, { content: '畫面', status: 'in_progress' }, { content: '上傳大頭照', status: 'pending' }] } });
+  const p = s.plan();
+  assert.equal(p.userSaid, '再加一個上傳大頭照');
+  assert.match(p.levels[2].reason, /再加一個上傳大頭照/);
+});
+
+test('你剛剛說：Claude 帶 said 就顯示濃縮句，帶空字串就丟掉', () => {
+  const s = inPlan();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '好那個按鈕我覺得顏色有點醜你可以改成紅色嗎還有字體也大一點' });
+  s.describe({ said: '按鈕改紅色、字體加大', levels: [] });
+  assert.equal(s.plan().userSaid, '按鈕改紅色、字體加大');
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '哈哈你好強' });
+  s.describe({ said: '', levels: [] });
+  assert.equal(s.plan().userSaid, '按鈕改紅色、字體加大');
+});
+
+test('你剛剛說：沒有計畫在進行時照舊覆蓋（新任務、已完成、沒清單的小任務）', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '第一件事' });
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '第二件事' });
+  assert.equal(s.plan().userSaid, '第二件事', '沒有清單：說什麼顯示什麼');
+  const d = inPlan();
+  d.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '欄位', status: 'completed' }, { content: '畫面', status: 'completed' }] } });
+  d.handle({ hook_event_name: 'UserPromptSubmit', prompt: '接著做別的' });
+  assert.equal(d.plan().userSaid, '接著做別的', '全部通關後的新一句是新任務');
+});

@@ -253,3 +253,13 @@ test('MCP：設定 QUEST_PET_NO_AUTOLAUNCH 就不會自動打開', async () => {
   fs.rmSync(root, { recursive: true, force: true });
   assert.equal(started, false);
 });
+
+test('MCP：describe_quest 與 quest_plan 的 schema 有 said，說明閒聊填空字串', async () => {
+  const replies = await talk({ QUEST_PET_NO_AUTOLAUNCH: '1', QUEST_PET_PORT: '1' }, [init, { jsonrpc: '2.0', id: 2, method: 'tools/list' }]);
+  const tools = replies.find(r => r.id === 2).result.tools;
+  for (const name of ['describe_quest', 'quest_plan']) {
+    const said = tools.find(t => t.name === name).inputSchema.properties.said;
+    assert.ok(said, name + ' 有 said');
+    assert.match(said.description, /閒聊/);
+  }
+});
