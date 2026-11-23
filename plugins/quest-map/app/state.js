@@ -141,7 +141,7 @@ function createSession() {
     const r = real();
     S.pastWorlds.push({ name: S.world, summary: r.length ? r.map(l => disp(l).title).join(tr('sep')) : S.goal });
     S.pendingSaid = null;
-    if (S.pastWorlds.length >= 60) S.pastWorlds.shift();   // 最多留 60 個已完成的世界，編號靠 round 推算不受影響
+    if (S.pastWorlds.length > 60) S.pastWorlds.shift();   // 最多留 60 個已完成的世界，編號靠 round 推算不受影響
     S.round++; S.levels = []; S.solo = 'doing';
     S.world = short(S.userSaid, 9) || tr('world.round', { n: S.round }); S.goal = short(S.userSaid, 36) || S.world;
   }
