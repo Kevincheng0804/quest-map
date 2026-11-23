@@ -20,6 +20,7 @@ function cleanPrompt(text) {
   const open = t.indexOf('<system-reminder>');
   if (open >= 0) t = t.slice(0, open);   // 沒收尾的：從那裡切到結尾
   t = t.replace(/<(ide_[a-z_]+)>[\s\S]*?<\/\1>/g, ' ');
+  t = t.replace(/<\/?pasted_content\b[^>]*>/g, ' ');   // 使用者貼上的內容：標籤拿掉，留下裡面的字
   t = t.replace(/\s+/g, ' ').trim();
   return t || tr('prompt.system');
 }
@@ -86,6 +87,7 @@ function createSession() {
     userSaid: '', aiSays: tr('says.idle'),
     levels: [], solo: 'todo', prompted: false, waitingFor: null, waitId: null, waitPrev: null,
     project: '', seq: 0, taskSeq: 0, toast: null, labels: new Map(), prog: new Map(),
+    promptSeq: 0,   // 使用者說過幾句話（判斷「你來做」的項目有沒有等到使用者回報）
     waitSince: null,   // 從什麼時候開始在等使用者（毫秒時間）
     chat: false,   // 來自 Cowork／聊天（沒有 hooks），進度全靠 Claude 回報
     activity: null, touched: new Map(), summary: ''   // 現在在做什麼、這次動過的檔案（依關卡）、收尾的一句話
@@ -165,6 +167,7 @@ function createSession() {
   };
 
   function onPrompt(raw) {
+    S.promptSeq++;
     const text = cleanPrompt(raw);
     clearWait();
     S.activity = null; S.touched.clear(); S.summary = '';
@@ -195,9 +198,15 @@ function createSession() {
       // 只是改措辭：同一個位置、清單一樣長，就當同一關，安靜更新
       if (!o && oldActive.length === list.length && oldActive[i] && !newTitles.has(oldActive[i].title) && alike(oldActive[i].title, title)) o = oldActive[i];
       if (o) used.add(o.id);
-      const status = nextStatus(o, t.status);
+      // 「你來做」的項目：Claude 不能自己標完成。一定要輪到使用者（標成進行中）之後、使用者又說過話，才算他回報、Claude 驗證過
+      let rawStatus = t.status, askedAt = o ? o.askedAt : undefined;
+      if (isUser) {
+        if (rawStatus === 'in_progress' && askedAt === undefined) askedAt = S.promptSeq;
+        if (rawStatus === 'completed' && !(askedAt !== undefined && S.promptSeq > askedAt)) { rawStatus = 'in_progress'; if (askedAt === undefined) askedAt = S.promptSeq; }
+      }
+      const status = nextStatus(o, rawStatus);
       const lv = { id: o ? o.id : 't' + (++S.seq), title, status, plain: t.description || t.activeForm || title, tech: tr(S.chat ? 'tech.chat' : 'tech.code', { title }) };
-      if (isUser) lv.user = true;
+      if (isUser) { lv.user = true; if (askedAt !== undefined) lv.askedAt = askedAt; }
       if (o && o.isNew) lv.isNew = true;
       if (o && o.reason && status !== 'done') lv.reason = o.reason;
       if (!o && hadPlan) { lv.isNew = true; lv.reason = tr('reason.new', { quote: quote() }); added++; }
@@ -243,7 +252,12 @@ function createSession() {
     if (input.subject) l.title = input.subject;
     if (input.description) l.plain = input.description;
     if (!input.status) return;
-    const st = nextStatus(l, input.status);
+    let raw = input.status;
+    if (l.user) {   // 同 TodoWrite：使用者說過話之後，「你來做」的項目才能標完成
+      if (raw === 'in_progress' && l.askedAt === undefined) l.askedAt = S.promptSeq;
+      if (raw === 'completed' && !(l.askedAt !== undefined && S.promptSeq > l.askedAt)) { raw = 'in_progress'; if (l.askedAt === undefined) l.askedAt = S.promptSeq; }
+    }
+    const st = nextStatus(l, raw);
     if (st === 'cancel' && l.status !== 'cancel') { l.reason = tr('reason.cancel', { quote: quote() }); delete l.isNew; setToast(0, 1, 0); }
     else if (st === 'adjust' && l.status !== 'adjust') { l.reason = tr('reason.rework', { quote: quote() }); setToast(0, 0, 1); }
     else if (st === 'done') delete l.reason;

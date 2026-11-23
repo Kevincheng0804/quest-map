@@ -127,7 +127,7 @@ async function onRequest(msg) {
       return reply({
         protocolVersion: params.protocolVersion || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'quest-map', version: '0.16.1' },
+        serverInfo: { name: 'quest-map', version: '0.16.2' },
         instructions: REMOTE ? REMOTE_INSTRUCTIONS : INSTRUCTIONS
       });
     case 'ping': return reply({});

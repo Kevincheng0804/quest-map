@@ -1114,7 +1114,8 @@ test('你來做：標記的項目畫成橘色的門，並列出清單；Claude �
   s.handle({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'ls' } });
   s.handle({ hook_event_name: 'Stop', last_assistant_message: '請你先更新外掛，做好跟我說。' });
   p = s.plan(); assert.equal(p.levels[1].status, 'wait');
-  // 使用者回報、Claude 驗證後標完成，下一件才輪到
+  // 使用者回報（說話）、Claude 驗證後標完成，下一件才輪到
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '做好了' });
   s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [
     { content: '修好程式', status: 'completed' }, { content: '【你來做】更新外掛', status: 'completed' }, { content: '【你來做】測試全螢幕', status: 'in_progress' }] } });
   p = s.plan();
@@ -1146,4 +1147,42 @@ test('你來做：TaskCreate 的項目也認得，權限提示優先於它', () 
   assert.equal(p.levels[0].title, '貼資料'); assert.equal(p.levels[0].status, 'wait'); assert.equal(p.waitKind, 'user');
   s.handle({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
   p = s.plan(); assert.equal(p.waitKind, 'approval');
+});
+
+test('你來做：Claude 自己標完成不算，要等使用者說過話才通關', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '做練習' });
+  const todo = status => ({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '建檔', status: 'completed' }, { content: '【你來做】確認檔案', status }] } });
+  s.handle(todo('in_progress'));
+  s.handle(todo('completed'));   // 同一輪裡 Claude 自己標完成
+  let p = s.plan();
+  assert.equal(p.levels[1].status, 'wait', '使用者還沒回報，維持橘色');
+  assert.equal(p.waitKind, 'user');
+  s.handle({ hook_event_name: 'Stop', last_assistant_message: '全部做完了！' });
+  assert.equal(s.plan().levels[1].status, 'wait', 'Stop 也不會讓它通關');
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '我看過了，沒問題' });
+  s.handle(todo('completed'));
+  p = s.plan();
+  assert.equal(p.levels[1].status, 'done');
+  assert.equal(p.waitKind, null);
+});
+
+test('你來做：一開始就標完成（沒經過進行中）也要先等使用者；TaskUpdate 同樣', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: 'x' });
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '【你來做】直接完成', status: 'completed' }] } });
+  assert.equal(s.plan().levels[0].status, 'wait');
+  const t = createSession();
+  t.handle({ hook_event_name: 'UserPromptSubmit', prompt: 'x' });
+  t.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskCreate', tool_input: { subject: '【你來做】貼資料' }, tool_response: { id: '1' } });
+  t.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'in_progress' } });
+  t.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'completed' } });
+  assert.equal(t.plan().levels[0].status, 'wait');
+  t.handle({ hook_event_name: 'UserPromptSubmit', prompt: '貼好了' });
+  t.handle({ hook_event_name: 'PostToolUse', tool_name: 'TaskUpdate', tool_input: { taskId: '1', status: 'completed' } });
+  assert.equal(t.plan().levels[0].status, 'done');
+});
+
+test('清理使用者的話：貼上內容的標籤拿掉，留下裡面的字', () => {
+  assert.equal(cleanPrompt('<pasted_content id="e40d"> 請幫我做練習 1. 建立檔案 </pasted_content>'), '請幫我做練習 1. 建立檔案');
 });
