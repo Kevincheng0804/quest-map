@@ -122,3 +122,13 @@ test('hook.js：讀任務檔只送標題與勾選，其他檔案不送', async (
   assert.ok(!JSON.stringify(got[0]).includes('SECRET-TEXT'));
   assert.equal(got[1].spec_tasks, undefined);
 });
+
+test('Claude 端的指引：排程任務等沒人在看的工作不要用地圖工具', () => {
+  const skill = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'plain-levels', 'SKILL.md'), 'utf8');
+  const head = skill.split('\n').slice(0, 4).join('\n');
+  assert.match(head, /排程任務/);
+  assert.match(head, /不要用在/);
+  assert.match(skill, /## 不要用的情況/);
+  const mcp = fs.readFileSync(path.join(__dirname, '..', 'mcp-server.js'), 'utf8');
+  assert.match(mcp, /先看這條：排程任務/);
+});

@@ -7,7 +7,6 @@ const { createHub, summarize, setLang } = require('./state');
 const I18n = require('./i18n');
 const { snapBattery, placeBattery, fitsDisplay, edgeBounds } = require('./placement');
 const opener = require('./opener');
-const { createWatcher } = require('./fullscreen');
 const { createStats } = require('./stats');
 
 if (process.env.QUEST_PET_USERDATA) app.setPath('userData', process.env.QUEST_PET_USERDATA);
@@ -79,10 +78,8 @@ function batteryDisplay() {
   return all.find(d => saved.battery && d.id === saved.battery.displayId) || screen.getPrimaryDisplay();
 }
 // 邊緣水位：蓋住把手所在螢幕的整個工作區，滑鼠點擊會穿透過去
-// 有別的程式全螢幕（例如全螢幕影片）時，框改蓋滿整個螢幕
-let fullscreenNow = false;
-function placeEdge(display) { edgeWin.setBounds(edgeBounds(display || batteryDisplay(), fullscreenNow)); }
-const fsWatcher = createWatcher({ onChange: fs2 => { fullscreenNow = fs2; if (edgeWin && !edgeWin.isDestroyed() && edgeWin.isVisible()) placeEdge(); } });
+// 框一律貼著螢幕實際邊緣（含工作列的位置），這樣全螢幕影片時也一樣大，不用偵測
+function placeEdge(display) { edgeWin.setBounds(edgeBounds(display || batteryDisplay())); }
 function dockBattery() {
   const display = batteryDisplay();
   placeEdge(display);
@@ -107,8 +104,8 @@ function dragEnd() {
   saveSoon();
 }
 
-function minimize() { dockBattery(); fsWatcher.start(); edgeWin.showInactive(); batWin.showInactive(); batWin.moveTop(); mapWin.hide(); saved.mode = 'battery'; saveSoon(); }
-function expand() { fsWatcher.stop(); mapWin.show(); batWin.hide(); edgeWin.hide(); saved.mode = 'map'; saveSoon(); }
+function minimize() { dockBattery(); edgeWin.showInactive(); batWin.showInactive(); batWin.moveTop(); mapWin.hide(); saved.mode = 'battery'; saveSoon(); }
+function expand() { mapWin.show(); batWin.hide(); edgeWin.hide(); saved.mode = 'map'; saveSoon(); }
 
 function createWindows() {
   const common = { frame: false, alwaysOnTop: true, show: false, webPreferences: { preload: path.join(__dirname, 'preload.js') } };
@@ -146,7 +143,7 @@ function startServer() {
     if (req.method === 'GET' && req.url === '/plan') return done(200, JSON.stringify(lastPlan));
     // 排查用：收到了哪些事件、有沒有收到連線測試（只有次數與名稱，沒有指令內容）
     if (req.method === 'GET' && req.url === '/version') return done(200, JSON.stringify({ version: VERSION, startedAt }));
-    if (req.method === 'GET' && req.url === '/stats') return done(200, JSON.stringify({ ...stats.snapshot(), fullscreenWatch: fsWatcher.info(), sessionList: hub.list() }, null, 2));
+    if (req.method === 'GET' && req.url === '/stats') return done(200, JSON.stringify({ ...stats.snapshot(), sessionList: hub.list() }, null, 2));
     if (req.method !== 'POST') return done(404);
     let body = '';
     req.on('data', c => { body += c; if (body.length > 4e6) req.destroy(); });
@@ -244,5 +241,5 @@ app.whenReady().then(() => {
     }, Number(process.env.QUEST_PET_SHOT_DELAY) || 6000);
   }
 });
-app.on('before-quit', () => { fsWatcher.stop(); saveNow(); });
+app.on('before-quit', saveNow);
 app.on('window-all-closed', () => app.quit());
