@@ -16,7 +16,7 @@ const REMOTE_INSTRUCTIONS = '使用者桌面上有一張「闖關地圖」，但
 const INSTRUCTIONS = [
   '先看這條：排程任務（提示開頭是 <scheduled-task、或由排程／定時啟動）、自動化、CI、claude -p 無頭模式、子代理、背景或例行工作、單純問答聊天翻譯、一兩步就做完的小事，都不要呼叫這些地圖工具，也不要為了地圖多列待辦，直接做事。地圖是給坐在電腦前看著對話的人用的；判斷不出來有沒有人在看時，寧可不用。',
   '使用者桌面上有一張「闖關地圖」和螢幕邊緣的水位，把你的工作畫成關卡，給不懂程式的人看進度。每個任務是一杯水，任務裡的小步驟每做完一步，水就漲一格。',
-  '先判斷你在哪裡：在 Claude Code 裡，狀態由 hooks 自動同步，照下面 1 到 3 做。在 Cowork（有「進度」面板）或一般聊天裡沒有自動同步，請改用 quest_plan：任務一開始就送出整份步驟清單，之後每次進度有變動（開始某一步、做完某一步、新增或拿掉步驟）都再送一次完整清單，內容跟你的進度面板一樣；做完時在 summary 寫一句白話結果；需要使用者動手時填 waiting_for。在 Cowork／聊天裡不要用 describe_quest。在 Cowork 裡，使用者在場、工作會持續一陣子且超過一個步驟（例如下載、整理檔案、寫程式、研究後產出檔案）時，主動這樣做，不用等使用者要求；單純問答、聊天、翻譯、解釋、排程任務不用。',
+  '先判斷你在哪裡：在 Claude Code 裡，狀態由 hooks 自動同步，照下面 1 到 3 做；如果你沒有待辦清單工具（TodoWrite、TaskCreate），就改用 quest_plan 送出整份步驟，之後每次有變動再送完整清單（要請使用者動手的步驟，標題開頭加「【你來做】」）。在 Cowork（有「進度」面板）或一般聊天裡沒有自動同步，請改用 quest_plan：任務一開始就送出整份步驟清單，之後每次進度有變動（開始某一步、做完某一步、新增或拿掉步驟）都再送一次完整清單，內容跟你的進度面板一樣；做完時在 summary 寫一句白話結果；需要使用者動手時填 waiting_for。在 Cowork／聊天裡不要用 describe_quest。在 Cowork 裡，使用者在場、工作會持續一陣子且超過一個步驟（例如下載、整理檔案、寫程式、研究後產出檔案）時，主動這樣做，不用等使用者要求；單純問答、聊天、翻譯、解釋、排程任務不用。',
   '在 Claude Code 裡，任務的狀態（未開始、進行中、完成）會自動同步，你不用回報。你要做的是替它補上白話文字：',
   '1. 有待辦清單時：每次建立清單，或清單新增、改寫項目之後，呼叫一次 describe_quest，替每個項目補上白話名稱，並把它拆成 2 到 5 個小步驟（steps）。',
   '2. 沒有待辦清單的小修改也要補：開始動手前，先呼叫一次 describe_quest（task 填 "1"，不要為此另外建立待辦清單），用一句白話說明你要改的是什麼功能，例如 title「把按鈕改紅色」、plain「把送出按鈕的顏色改成紅色，讓人更容易看到」。小到一兩步的修改不用給 steps。如果使用者只是在問問題、不需要你動手改東西，就不用呼叫。',
@@ -57,7 +57,7 @@ const TOOLS = [{
   }
 }, {
   name: 'quest_plan',
-  description: '【只在 Cowork 或一般聊天裡用；Claude Code 裡不要用】回報這個任務的整份步驟清單和每一步的狀態，闖關地圖會畫成關卡。Cowork／聊天沒有自動同步，所以任務一開始就呼叫一次，之後每次進度有變動（開始某一步、做完某一步、新增或拿掉步驟）就再呼叫一次，每次都送完整清單。',
+  description: '回報這個任務的整份步驟清單和每一步的狀態，闖關地圖會畫成關卡。在 Cowork／一般聊天裡用它（沒有自動同步）；在 Claude Code 裡，只有在你沒有待辦清單工具（TodoWrite、TaskCreate）時才用它，有的話用待辦清單。要請使用者動手的步驟，標題開頭加「【你來做】」。任務一開始就呼叫一次，之後每次進度有變動（開始某一步、做完某一步、新增或拿掉步驟）就再呼叫一次，每次都送完整清單。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -127,7 +127,7 @@ async function onRequest(msg) {
       return reply({
         protocolVersion: params.protocolVersion || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'quest-map', version: '0.16.2' },
+        serverInfo: { name: 'quest-map', version: '0.16.3' },
         instructions: REMOTE ? REMOTE_INSTRUCTIONS : INSTRUCTIONS
       });
     case 'ping': return reply({});
@@ -142,7 +142,7 @@ async function onRequest(msg) {
         if (!args.goal || !Array.isArray(args.steps)) return reply({ content: [{ type: 'text', text: 'goal 和 steps 都要填，steps 必須是陣列。' }], isError: true });
         let r = await request('POST', '/chatplan', args);
         if (!r.ok && r.error && await ensureApp({ opener: opener() })) r = await request('POST', '/chatplan', args);
-        if (r.status === 409) return text('這裡不需要 quest_plan：Claude Code 裡的進度會自動同步。請改照 describe_quest 與 quest_progress 的說明做，不要再呼叫 quest_plan。');
+        if (r.status === 409) return text('這個對話已經用待辦清單（或規格任務檔）同步進度，不需要 quest_plan。請改照 describe_quest 與 quest_progress 的說明做，不要再呼叫 quest_plan。');
         return text(r.ok ? `地圖已同步 ${args.steps.length} 個步驟。之後進度有變動，請再送一次完整清單。` : closed);
       }
       if (params.name === 'quest_ping') {

@@ -27,7 +27,7 @@ description: 只在「有人在對話裡即時看著」時使用：在 Claude Co
 
 ## 0. 先判斷你在哪裡
 
-- **Claude Code**：狀態由 hooks 自動同步，照下面第 1 到 2 節做。
+- **Claude Code**：狀態由 hooks 自動同步，照下面第 1 到 2 節做。**如果你沒有待辦清單工具**（TodoWrite、TaskCreate 查不到或不能用），改用 `quest_plan` 送出整份步驟（寫法同下面 Cowork 那段），不要退回「整件事一關」。要請使用者動手的步驟，標題開頭加 `【你來做】`。
 - **Cowork（有「進度」面板）或一般聊天**：沒有自動同步，改用 `quest_plan`，不要用 `describe_quest`。
   - 任務一開始就呼叫一次，送出 `goal`（一句白話，這個任務要完成什麼）和整份 `steps`（白話步驟名稱，每步有 `status`：`pending`、`in_progress`、`completed`）。
   - 之後每次進度有變動（開始某一步、做完某一步、新增或拿掉步驟）就再呼叫一次，**每次都送完整清單**，內容跟你的進度面板一樣。

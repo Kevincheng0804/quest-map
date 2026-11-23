@@ -136,7 +136,7 @@ function createSession() {
     S.aiSays = tr('says.door');
   }
   function archive() {
-    S.specBound = false;
+    S.specBound = false; S.bound = null;
     const r = real();
     S.pastWorlds.push({ name: S.world, summary: r.length ? r.map(l => disp(l).title).join(tr('sep')) : S.goal });
     S.round++; S.levels = []; S.solo = 'doing';
@@ -367,7 +367,7 @@ function createSession() {
     if (e.cwd && !S.project) S.project = path.basename(e.cwd);
     const tool = e.tool_name, input = e.tool_input || {};
     const isTodoTool = tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate';
-    if (S.specBound && isTodoTool) return false;   // 這個對話以規格任務檔為準
+    if ((S.specBound || S.bound === 'quest') && isTodoTool) return false;   // 這個對話以規格任務檔（或 quest_plan）為準
     const spec = e.spec_tasks && S.prompted ? onSpecTasks(e.spec_tasks) : false;
     switch (e.hook_event_name) {
       case 'SessionStart': return true;
@@ -381,6 +381,7 @@ function createSession() {
       }
       case 'PostToolUse': {
         if (tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate') {
+          if (!S.bound) S.bound = 'todo';
           const was = cupId();
           if (tool === 'TodoWrite') onTodos(input.todos);
           else if (tool === 'TaskCreate') onTaskCreate(input, e.tool_response);
@@ -460,7 +461,7 @@ function createSession() {
     const first = units.findIndex(u => !u.done);
     const todos = units.map((u, i) => ({ content: u.title, status: u.done ? 'completed' : i === first ? 'in_progress' : 'pending' }));
     const wasBound = S.specBound;
-    S.specBound = true;
+    S.specBound = true; S.bound = 'spec';
     onTodos(todos);
     if (d.name && !wasBound) S.world = short(d.name, 12);   // 第一次綁定：世界名稱用任務資料夾名稱
     if (!flat) units.forEach(u => {
@@ -480,8 +481,14 @@ function createSession() {
     }
   }
   // 每次都收到整份清單，沿用 TodoWrite 的比對邏輯：新增、拆除、回頭修、完成判定都不用另外寫
-  function applyPlan(d) {
-    startChat(d.goal);
+  // asCode：Claude Code 的對話也可以用 quest_plan（例如它沒有待辦清單工具時）。但同一輪只認一個來源：已經用待辦清單或規格任務檔，就不收
+  function applyPlan(d, asCode) {
+    if (asCode) {
+      if (S.bound === 'todo' || S.bound === 'spec') return false;
+      S.bound = 'quest';
+      if (!S.prompted) { S.prompted = true; if (S.solo === 'todo') S.solo = 'doing'; }
+      if (d.goal) S.goal = short(d.goal, 36);
+    } else startChat(d.goal);
     const steps = Array.isArray(d.steps) ? d.steps : [];
     const todos = steps.filter(x => x && x.title).map(x => { const sp = splitUser(x.title); return { content: short(sp.title, 24), user: sp.user, status: STEP_STATUS[x.status] || 'pending', description: x.plain }; });
     if (todos.length) onTodos(todos); else clearWait();
@@ -582,6 +589,12 @@ function createHub() {
     },
     // Cowork／聊天用 quest_plan 回報整份計畫。Claude Code 裡的狀態由 hooks 同步，不收這個，免得重複建關卡
     chatPlan(d, now = Date.now()) {
+      if (d && !d.chat) {   // Claude Code 的對話：沒有待辦清單工具時，Claude 用 quest_plan 回報整份計畫
+        const en = pick(d);
+        if (!en || en.chat || !en.s.applyPlan(d, true)) return false;
+        en.last = now; lastActive = en.id;
+        return true;
+      }
       if (!d || !d.chat) return false;
       for (const x of ordered()) if (now - x.last > STALE_MS) drop(x.id);
       const id = 'chat:' + String(d.task_id || 'main').slice(0, 40);

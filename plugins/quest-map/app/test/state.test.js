@@ -1186,3 +1186,33 @@ test('你來做：一開始就標完成（沒經過進行中）也要先等使�
 test('清理使用者的話：貼上內容的標籤拿掉，留下裡面的字', () => {
   assert.equal(cleanPrompt('<pasted_content id="e40d"> 請幫我做練習 1. 建立檔案 </pasted_content>'), '請幫我做練習 1. 建立檔案');
 });
+
+test('Claude Code 沒有待辦清單工具時，可以用 quest_plan 回報，也能標「你來做」', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: 'C:/w/new', prompt: '做練習' });
+  const plan = steps => ({ goal: '建立檔案並請我確認', world: '練習小村', steps, project_dir: 'C:\\w\\new', chat: false });
+  assert.equal(hub.chatPlan(plan([{ title: '建立 hello.txt', status: 'completed' }, { title: '【你來做】確認 hello.txt', status: 'in_progress' }, { title: '收尾', status: 'pending' }])), true);
+  let p = hub.plan();
+  assert.equal(p.source, 'code', '仍是 Claude Code 的對話，不是 Cowork');
+  assert.deepEqual(p.levels.map(l => [l.title, l.status]), [['建立 hello.txt', 'done'], ['確認 hello.txt', 'wait'], ['收尾', 'todo']]);
+  assert.equal(p.waitKind, 'user');
+  assert.equal(p.world, '練習小村');
+  // 同一輪只認一個來源：之後用待辦清單工具的事件被忽略
+  hub.handle({ hook_event_name: 'PostToolUse', session_id: 'a', project_dir: 'C:/w/new', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '別的', status: 'in_progress' }] } });
+  assert.equal(hub.plan().levels.length, 3);
+  // Claude 自己標完成不算；使用者回報後才通關
+  assert.equal(hub.chatPlan(plan([{ title: '建立 hello.txt', status: 'completed' }, { title: '【你來做】確認 hello.txt', status: 'completed' }, { title: '收尾', status: 'completed' }])), true);
+  assert.equal(hub.plan().levels[1].status, 'wait');
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: 'C:/w/new', prompt: '我確認好了' });
+  hub.chatPlan(plan([{ title: '建立 hello.txt', status: 'completed' }, { title: '【你來做】確認 hello.txt', status: 'completed' }, { title: '收尾', status: 'completed' }]));
+  assert.ok(hub.plan().levels.every(l => l.status === 'done'));
+});
+
+test('quest_plan：已經用待辦清單的對話不收；找不到對話也不收', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: '/w/proj', prompt: 'x' });
+  hub.handle({ hook_event_name: 'PostToolUse', session_id: 'a', project_dir: '/w/proj', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '甲', status: 'in_progress' }] } });
+  assert.equal(hub.chatPlan({ goal: 'g', steps: [{ title: '乙', status: 'pending' }], project_dir: '/w/proj', chat: false }), false);
+  assert.deepEqual(hub.plan().levels.map(l => l.title), ['甲']);
+  assert.equal(createHub().chatPlan({ goal: 'g', steps: [], project_dir: '/nowhere', chat: false }), false);
+});

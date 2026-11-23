@@ -131,13 +131,13 @@ test('MCP：有專案資料夾（Claude Code）時不是聊天；QUEST_PET_CHAT 
   assert.equal(byDone(3).chat, false, 'QUEST_PET_CHAT=0 強制不是聊天');
 });
 
-test('MCP：Claude Code 裡呼叫 quest_plan 會被地圖拒絕（409），回覆告訴 Claude 不要用', async () => {
+test('MCP：地圖拒絕 quest_plan（409，已用待辦清單）時，回覆告訴 Claude 改用 describe_quest', async () => {
   const refuse = await fixedStatus(409);
   const replies = await talk({ QUEST_PET_NO_AUTOLAUNCH: '1', QUEST_PET_PORT: String(refuse.port), CLAUDE_PROJECT_DIR: '/demo/proj' },
     [init, call(2, 'quest_plan', { goal: 'x', steps: [] })]);
   refuse.server.close();
   const t = textOf(replies.find(r => r.id === 2));
-  assert.match(t, /這裡不需要 quest_plan/);
+  assert.match(t, /不需要 quest_plan/);
   assert.match(t, /不要再呼叫/);
 });
 
