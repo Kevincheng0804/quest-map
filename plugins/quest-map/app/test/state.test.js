@@ -1263,3 +1263,14 @@ test('你剛剛說：沒有計畫在進行時照舊覆蓋（新任務、已完�
   d.handle({ hook_event_name: 'UserPromptSubmit', prompt: '接著做別的' });
   assert.equal(d.plan().userSaid, '接著做別的', '全部通關後的新一句是新任務');
 });
+
+test('已完成的世界最多保留 60 個，編號靠 round 推算', () => {
+  const s = createSession();
+  for (let i = 0; i < 65; i++) {
+    s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '任務 ' + i });
+    s.handle({ hook_event_name: 'PostToolUse', tool_name: 'TodoWrite', tool_input: { todos: [{ content: '步驟 ' + i, status: 'completed' }] } });
+  }
+  const p = s.plan();
+  assert.equal(p.pastWorlds.length, 60);
+  assert.equal(p.round, 65);
+});

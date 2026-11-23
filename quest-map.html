@@ -120,6 +120,29 @@ svg.map { position: absolute; inset: 0; z-index: 1; }
 .world .disc { width: 76px; height: 76px; border-radius: 50%; background: var(--done); border: 4px solid #fff; box-shadow: 0 4px 0 #0f5c30; display: grid; place-items: center; color: #fff; }
 .world .disc svg { width: 34px; height: 34px; }
 .world .name { background: #fff; border-radius: 8px; padding: 2px 10px; font-size: 13px; font-weight: 600; box-shadow: 0 1px 4px rgba(0, 0, 0, .15); white-space: nowrap; }
+/* 已完成世界的歷史畫面：每張地圖放 3 個，往左看更早的 */
+.navbtn { position: absolute; z-index: 21; width: 56px; height: 56px; border-radius: 50%; border: 2px solid #fff; background: var(--ink); color: #fff; display: grid; place-items: center; box-shadow: 0 4px 14px rgba(20, 50, 70, .3); }
+.navbtn svg { width: 26px; height: 26px; }
+.navbtn[hidden] { display: none; }
+#navOlder { left: 14px; top: 370px; }
+#history { position: absolute; z-index: 22; left: 0; right: 0; top: 60px; bottom: 0; background: #cfe6ec; }
+#history[hidden] { display: none; }
+#history .island { position: absolute; left: 110px; right: 110px; top: 70px; bottom: 60px; border-radius: 50%; background: radial-gradient(ellipse at center, #bfe6a8 0 55%, #a6dc8e 56%); }
+#history h2 { position: absolute; top: 22px; left: 0; right: 0; text-align: center; margin: 0; font-size: 26px; }
+#history .hrow { position: absolute; left: 150px; right: 150px; top: 150px; display: flex; gap: 28px; justify-content: center; align-items: flex-start; }
+#history .hcard { width: 360px; background: #fff; border-radius: 16px; padding: 18px 20px; box-shadow: 0 6px 20px rgba(20, 50, 70, .22); }
+#history .hcard:nth-child(2) { margin-top: 36px; }
+#history .hcard:nth-child(3) { margin-top: 72px; }
+#history .hcard .disc { width: 64px; height: 64px; border-radius: 50%; background: var(--done); border: 4px solid #fff; box-shadow: 0 4px 0 #0f5c30; display: grid; place-items: center; color: #fff; margin: -52px auto 8px; }
+#history .hcard .disc svg { width: 30px; height: 30px; }
+#history .hcard h3 { margin: 0 0 8px; font-size: 17px; text-align: center; }
+#history .hcard ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+#history .hcard li { display: flex; gap: 8px; align-items: flex-start; }
+#history .hcard li svg { width: 16px; height: 16px; flex: none; margin-top: 3px; color: var(--done); }
+#history .hpage { position: absolute; bottom: 24px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 14px; }
+#history .hpage button.back { min-height: 44px; padding: 0 20px; border-radius: 22px; border: 2px solid #fff; background: var(--ink); color: #fff; font-weight: 700; font-size: 15px; }
+#history .navbtn.left { left: 24px; top: 380px; }
+#history .navbtn.right { right: 24px; top: 380px; }
 #worldpop { position: absolute; z-index: 15; width: 250px; background: #fff; border-radius: 12px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(20, 50, 70, .25); transform: translate(-40px, -100%); }
 #worldpop h3 { margin: 0 0 6px; font-size: 15px; }
 #worldpop ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
@@ -286,6 +309,7 @@ html.live .demo button, html.live .demo select { -webkit-app-region: no-drag; al
 
   <div class="final"><div class="lbl"><b id="finalName"></b><span id="finalLock"></span></div></div>
   <div id="worlds"></div>
+  <button type="button" class="navbtn" id="navOlder" hidden></button>
   <div id="levels"></div>
   <div class="more" id="moreBefore" hidden></div>
   <div class="more" id="moreAfter" hidden></div>
@@ -322,6 +346,9 @@ html.live .demo button, html.live .demo select { -webkit-app-region: no-drag; al
   <div class="hud" id="sessions" hidden></div>
   <div class="hud" id="said"><div class="eyebrow" id="saidLabel">你剛剛說</div><p id="saidText"></p></div>
   <div class="hud" id="card" aria-live="polite"></div>
+  <div id="history" hidden><div class="island"></div><h2 id="histTitle"></h2><div class="hrow" id="histRow"></div>
+    <button type="button" class="navbtn left" id="histOlder"></button><button type="button" class="navbtn right" id="histNewer"></button>
+    <div class="hpage"><button type="button" class="back" id="histBack"></button><span id="histPage"></span></div></div>
   <div id="toast" role="status"></div>
   <div id="opened" role="status" hidden><div><b id="openedText"></b><small id="openedHint"></small></div><button type="button" id="openedClose"></button></div>
 </div>
@@ -366,6 +393,9 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- 範例資料：做一個社團報名網站 ---------- */
 const PAST = [
+  { name: '專案起點', summary: '決定社團網站要有哪些頁面、準備素材' },
+  { name: '配色小鎮', summary: '選主色、字體、做出共用的頁首與頁尾' },
+  { name: '導覽列港口', summary: '做出選單、手機版收合、目前頁面標示' },
   { name: '網站骨架', summary: '建立專案、選定網頁樣式、放上社團名稱' },
   { name: '首頁平原', summary: '社團介紹、活動照片牆、我要報名按鈕' }
 ];
@@ -377,7 +407,7 @@ const L = {
   f5: { id: 'f5', title: '測試整個流程', plain: '假裝自己是報名的人，從頭到尾走一遍，確認沒問題。', tech: '端對端測試：填表 → 儲存 → 通知' }
 };
 const lv = (id, status, more) => ({ ...L[id], status, ...more });
-const base = { round: 3, world: '報名表單森林', goal: '做出報名表單', pastWorlds: PAST, finalGoal: '上線城堡', waitingFor: null, choice: null, toast: null };
+const base = { round: 6, world: '報名表單森林', goal: '做出報名表單', pastWorlds: PAST, finalGoal: '上線城堡', waitingFor: null, choice: null, toast: null };
 const SCENARIOS = {
   normal: { ...base,
     userSaid: '幫我做報名表單，報名成功後要寄確認信',
@@ -422,7 +452,7 @@ const SCENARIOS = {
 };
 
 /* ---------- 座標：預先排好的插槽 ---------- */
-const WORLD_POS = [{ x: 115, y: 600 }, { x: 275, y: 678 }];
+const WORLD_POS = [{ x: 90, y: 478 }, { x: 190, y: 588 }, { x: 305, y: 688 }];
 const FINAL = { x: 1250, y: 250 };
 let finalOn = false;   // 全部完成了嗎（通往城堡的路要不要變綠）
 const SLOTS = {};
@@ -606,6 +636,7 @@ function render(next, opts = {}) {
   $('saidText').textContent = T('ui.quote', { s: plan.userSaid });
   $('finalName').textContent = plan.finalGoal;
   renderWorlds();
+  renderHistory();
   renderSessions(plan);
   renderCard();
 
@@ -691,6 +722,35 @@ $('sessions').addEventListener('click', e => {
   const b = e.target.closest('.srow'); if (!b) return;
   if (pet) pet.select(b.dataset.id); else demoSelect(b.dataset.id);
 });
+
+/* ---------- 已完成的世界：主畫面放最近 3 個，更早的往左看（每張 3 個） ---------- */
+const PER = WORLD_POS.length;
+let histPage = 0;   // 0＝主畫面；1 起是更早的幾張
+const pastN = () => (plan ? plan.pastWorlds.length : 0);
+const maxPage = () => Math.ceil(Math.max(pastN() - PER, 0) / PER);
+function histRange(page) { const end = pastN() - PER - PER * (page - 1); return [Math.max(end - PER, 0), end]; }
+function renderHistory() {
+  if (histPage > maxPage()) histPage = maxPage();
+  const on = histPage > 0;
+  $('navOlder').hidden = on || pastN() <= PER;
+  $('navOlder').setAttribute('aria-label', T('ui.older'));
+  $('history').hidden = !on;
+  if (!on) return;
+  const [a, b] = histRange(histPage);
+  const base = plan.round - pastN();   // 第一個已完成世界的編號
+  $('histTitle').textContent = T('ui.histTitle', { a: base + a, b: base + b - 1 });
+  $('histRow').innerHTML = plan.pastWorlds.slice(a, b).map((w, i) => `<div class="hcard"><div class="disc">${ICON.flag}</div><h3>${esc(T('ui.world', { n: base + a + i, name: w.name }))}</h3><ul>${String(w.summary || '').split(/[、，,]/).filter(x => x.trim()).map(x => `<li>${ICON.done}<span>${esc(x.trim())}</span></li>`).join('')}</ul></div>`).join('');
+  $('histOlder').hidden = a <= 0;
+  $('histOlder').setAttribute('aria-label', T('ui.older')); $('histNewer').setAttribute('aria-label', T('ui.newer')); $('histBack').textContent = T('ui.histBack');
+  $('histPage').textContent = T('ui.histPage', { p: histPage, m: maxPage() });
+}
+$('navOlder').innerHTML = svg('<path d="M15 5l-7 7 7 7"/>');
+$('histOlder').innerHTML = svg('<path d="M15 5l-7 7 7 7"/>');
+$('histNewer').innerHTML = svg('<path d="M9 5l7 7-7 7"/>');
+$('navOlder').addEventListener('click', () => { histPage = 1; renderHistory(); });
+$('histOlder').addEventListener('click', () => { histPage = Math.min(histPage + 1, maxPage()); renderHistory(); });
+$('histNewer').addEventListener('click', () => { histPage = Math.max(histPage - 1, 0); renderHistory(); });
+$('histBack').addEventListener('click', () => { histPage = 0; renderHistory(); });
 
 function renderWorlds() {
   const box = $('worlds');
