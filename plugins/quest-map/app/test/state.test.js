@@ -1274,3 +1274,45 @@ test('已完成的世界最多保留 60 個，編號靠 round 推算', () => {
   assert.equal(p.pastWorlds.length, 60);
   assert.equal(p.round, 65);
 });
+
+const SCHED = '<scheduled-task name="nightly-watchlist-analysis" file="/x/SKILL.md">\n請做每晚分析\n</scheduled-task>';
+test('排程任務：完全不出現在地圖上，也不觸發等你', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'real', project_dir: '/w/proj', prompt: '我自己的事' });
+  assert.equal(hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'sched', project_dir: '/w/stock', prompt: SCHED }), false);
+  hub.handle({ hook_event_name: 'Notification', session_id: 'sched', project_dir: '/w/stock', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
+  hub.handle({ hook_event_name: 'PostToolUse', session_id: 'sched', project_dir: '/w/stock', tool_name: 'Bash', tool_input: { command: 'ls' } });
+  const p = hub.plan();
+  assert.deepEqual(p.sessions.map(x => x.name), ['proj']);
+  assert.equal(summarize(p).waiting, false, '排程任務的權限提示不會讓地圖亮橘色');
+  assert.deepEqual(hub.list().map(x => x.name), ['proj']);
+  assert.equal(hub.ignoredCount(), 1);
+});
+
+test('排程任務：先因 SessionStart 建了對話，收到排程提示後會被移除', () => {
+  const hub = createHub();
+  hub.handle({ hook_event_name: 'SessionStart', session_id: 'sched', project_dir: '/w/stock' });
+  assert.equal(hub.list().length, 1);
+  assert.equal(hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'sched', project_dir: '/w/stock', prompt: SCHED }), true, '回傳 true 讓畫面重畫');
+  assert.equal(hub.list().length, 0);
+  assert.equal(hub.handle({ hook_event_name: 'SessionEnd', session_id: 'sched' }), false);
+});
+
+test('排程任務：QUEST_PET_SHOW_SCHEDULED=1 時照舊顯示；一般的提示不受影響', () => {
+  process.env.QUEST_PET_SHOW_SCHEDULED = '1';
+  try {
+    const hub = createHub();
+    hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'sched', project_dir: '/w/stock', prompt: SCHED });
+    assert.deepEqual(hub.plan().sessions.map(x => x.name), ['stock']);
+  } finally { delete process.env.QUEST_PET_SHOW_SCHEDULED; }
+  const hub2 = createHub();
+  hub2.handle({ hook_event_name: 'UserPromptSubmit', session_id: 'a', project_dir: '/w/a', prompt: '請解釋 <scheduled-task> 這個標籤是什麼' });
+  assert.equal(hub2.list().length, 1, '提示不是以排程標籤開頭，不會被擋');
+});
+
+test('排程任務：被忽略的編號有上限，不會無限成長', () => {
+  const hub = createHub();
+  for (let i = 0; i < 600; i++) hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 's' + i, prompt: SCHED });
+  assert.equal(hub.ignoredCount(), 600);
+  assert.equal(hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 's599', prompt: 'hi' }), false, '最近的仍被忽略');
+});

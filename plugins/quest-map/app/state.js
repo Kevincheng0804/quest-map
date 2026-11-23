@@ -526,6 +526,8 @@ const dirKey = p => { p = String(p || '').replace(/\\/g, '/').replace(/\/+$/, ''
 // 每個對話各記一份進度。畫面顯示「使用者選的那個」，沒選過就跟著最近有動靜的。
 function createHub() {
   const entries = new Map();   // session_id → { id, s, dir, last, seq }
+  const ignored = new Set();   // 排程任務的對話編號：地圖完全不理它們（使用者不想在地圖上看到排程任務）
+  let ignoredTotal = 0;
   let seq = 0, lastActive = null, selected = null;
   const idle = createSession();
   const ordered = () => [...entries.values()].sort((a, b) => a.seq - b.seq);
@@ -577,6 +579,14 @@ function createHub() {
   return {
     handle(e, now = Date.now()) {
       const id = e.session_id || 'default';
+      if (ignored.has(id)) return false;   // 排程任務之後的所有事件（工具、權限提示、結束）都不處理
+      if (e.hook_event_name === 'UserPromptSubmit' && /^\s*<scheduled-task\b/.test(String(e.prompt || '')) && !process.env.QUEST_PET_SHOW_SCHEDULED) {
+        if (ignored.size >= 500) ignored.delete(ignored.values().next().value);
+        ignored.add(id); ignoredTotal++;
+        const had = entries.has(id);
+        if (had) drop(id);   // 先前因為 SessionStart 建了空的對話，現在移除
+        return had;
+      }
       if (e.hook_event_name === 'SessionEnd') {
         if (!entries.has(id)) return false;
         drop(id);
@@ -627,6 +637,7 @@ function createHub() {
     },
     // 使用者在清單點選；之後畫面固定顯示它，直到它結束
     // 診斷用：地圖目前認得哪些對話（不含指令、檔案或你說的話）。peek 不會用掉通知
+    ignoredCount: () => ignoredTotal,
     list() {
       const nm = names();
       return ordered().map(x => { const s = summarize(x.s.peek()); return { name: nm.get(x.id) || '(' + (baseName(x.dir) || '?') + ')', ...(x.s.isFresh() ? { fresh: true } : {}), done: s.done, total: s.total, waiting: s.waiting, chat: !!x.chat, lastAt: new Date(x.last).toISOString() }; });
