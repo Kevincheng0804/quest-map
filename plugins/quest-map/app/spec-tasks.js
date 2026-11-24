@@ -85,6 +85,31 @@ function findByName(root, name, { fs = require('fs'), maxDepth = 6, maxEntries =
   return null;
 }
 
+// 提示裡沒有名稱、Claude 也還沒碰到檔案時：找「目前進行中」的變更。
+// 1. Spectra 在 .spectra/changes/<名稱>.started 留的進行中標記；2. 常見位置底下還有未勾選項目的 change（排除 archive）。
+// tasks.md 已經全部勾完的不算（那是已完成的變更，不是這一輪的任務）。多個時取最近修改的。
+function activeChange(root, { fs = require('fs') } = {}) {
+  if (!root) return null;
+  const base = String(root).replace(/[\\/]+$/, '');
+  const mt = p => { try { return fs.statSync(p).mtimeMs; } catch { return 0; } };
+  const pending = t => { const spec = readSpecTasks(t, { fs }); return !!spec && spec.groups.some(g => g.items.some(i => !i.done)); };
+  const started = [];
+  try { for (const f of fs.readdirSync(`${base}/.spectra/changes`)) if (/\.started$/.test(f)) started.push({ name: f.replace(/\.started$/, ''), at: mt(`${base}/.spectra/changes/${f}`) }); } catch { /* 沒有標記 */ }
+  started.sort((a, b) => b.at - a.at);
+  for (const c of started) { const t = findByName(base, c.name, { fs }); if (t && pending(t)) return { path: t, why: 'active-change' }; }
+  const found = [];
+  for (const k of ['docs/spectra/changes', 'openspec/changes', '.spectra/changes', 'spectra/changes', 'changes']) {
+    let dirs; try { dirs = fs.readdirSync(`${base}/${k}`, { withFileTypes: true }); } catch { continue; }
+    for (const d of dirs) {
+      if (!d.isDirectory() || /^archive/i.test(d.name)) continue;
+      const t = `${base}/${k}/${d.name}/tasks.md`, at = mt(t);
+      if (at && pending(t)) found.push({ path: t, at });
+    }
+  }
+  found.sort((a, b) => b.at - a.at);
+  return found[0] ? { path: found[0].path, why: 'active-change' } : null;
+}
+
 // 提示裡可能的 change 名稱：kebab-case 的詞（add-array-reference-scenario）
 const promptNames = prompt => [...new Set(String(prompt || '').match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/g) || [])].filter(x => x.length >= 5).slice(0, 5);
 
@@ -104,9 +129,10 @@ function detectSpecPath(ev, { fs = require('fs'), root } = {}) {
         const t = findByName(root, n, { fs });
         if (t) return { path: t, why: 'prompt-name' };
       }
+      return activeChange(root, { fs });   // 提示裡沒有名稱：找進行中的變更
     }
   } catch { /* 找不到就當沒這回事 */ }
   return null;
 }
 
-module.exports = { specTasksName, parseTasks, itemTitle, MAX_BYTES, readSpecTasks, siblingTasks, findByName, promptNames, detectSpecPath };
+module.exports = { specTasksName, parseTasks, itemTitle, MAX_BYTES, readSpecTasks, siblingTasks, findByName, promptNames, detectSpecPath, activeChange };

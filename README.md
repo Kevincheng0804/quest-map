@@ -212,6 +212,7 @@ Claude 需要你自己做某件事（更新外掛、實際操作測試、貼資�
   1. Claude 讀或改了 `…/changes/<名稱>/tasks.md`、`…/specs/<名稱>/tasks.md`（含 `.kiro/specs`）。
   2. Claude 碰了**同一個 change 資料夾裡的任何檔案**（`proposal.md`、`design.md`、`specs/…`），地圖就取同資料夾的 `tasks.md`。
   3. 你的那句話裡有 change 名稱（例如 `/spectra-apply add-array-reference-scenario`），地圖會先直接看常見位置（`docs/spectra/changes`、`openspec/changes`、`.spectra/changes`、`specs` 等），找不到再在專案資料夾底下搜尋 `changes/<那個名稱>/tasks.md`（最深 6 層、略過 `node_modules`、`.git` 等；專案裡檔案再多也不影響）。
+  4. 以上都沒有（你的話裡沒打名稱、Claude 也還沒碰到檔案）時，地圖在你說話的當下找「進行中的變更」：先看 Spectra 的 `.spectra/changes/<名稱>.started` 標記，沒有的話看常見位置底下還有未勾選項目的 change（排除 `archive`）。任務已經全部勾完的不算；有多個時取最近修改的那個。
 - **之後自動跟著更新**：綁定後，這個對話每個動作（工具、收尾）進來時，地圖最多每 1 秒重讀一次任務檔，所以 Spectra 的介面或指令打勾、Claude 用指令改檔，下一個動作地圖就會跟著變。這個 change 全部完成後，你說下一句新的話，就不再沿用它。
 - **沒用這類工具的專案**：照舊用 Claude 自己拆的待辦，沒有任何改變。
 - **怎麼畫**：`## 1. 標題` 這種分組是一關，分組底下的 `- [ ]` 是小步驟，水位照勾了幾項漲。沒有分組的清單，每個勾選項一關。項目文字很長時，取第一句（「：」或「。」之前）當標題，編號和 `[after: …]` 會去掉。

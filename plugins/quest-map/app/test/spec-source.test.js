@@ -41,7 +41,8 @@ test('detectSpecPath：提示裡的 change 名稱找得到檔案（略過 node_m
     assert.ok(r.path.replace(/\\/g, '/').endsWith(prefix + '/add-array-reference-scenario/tasks.md'), prefix);
   }
   const p = project();
-  assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: 'fix some-other-thing please' }, { root: p.root }), null);
+  assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: 'fix some-other-thing please' }, { root: p.root }).why, 'active-change', '提示的名稱找不到，退回找進行中的變更');
+  assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: 'fix some-other-thing please' }, { root: fs.mkdtempSync(path.join(os.tmpdir(), 'none-')) }), null, '什麼都沒有就不綁');
   assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: 'hello' }, { root: undefined }), null);
   assert.deepEqual(promptNames('a-b add-array-reference-scenario add-array-reference-scenario'), ['add-array-reference-scenario']);
 });
@@ -120,4 +121,46 @@ test('findByName：專案裡有很多檔案也找得到（常見位置直接看�
   for (let i = 0; i < 4000; i++) fs.writeFileSync(path.join(d, `f${i}.png`), '');
   const dir = path.join(odd, 'tools', 'x', 'changes', 'my-change'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'tasks.md'), TASKS);
   assert.ok(findByName(odd, 'my-change'), '少見的位置，靠搜尋；檔案再多也不吃額度');
+});
+
+const { activeChange } = require('../spec-tasks');
+const mkChange = (root, rel, name, text) => { const d = path.join(root, ...rel.split('/'), name); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, 'tasks.md'), text); return path.join(d, 'tasks.md'); };
+
+test('active-change：Spectra 的 .started 標記指出進行中的變更', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'act-'));
+  mkChange(root, 'docs/spectra/changes', 'add-a', TASKS);
+  mkChange(root, 'docs/spectra/changes', 'add-b', TASKS);
+  fs.mkdirSync(path.join(root, '.spectra', 'changes'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.spectra', 'changes', 'add-b.started'), '');
+  const r = activeChange(root);
+  assert.equal(r.why, 'active-change');
+  assert.ok(r.path.replace(/\\/g, '/').endsWith('add-b/tasks.md'), '取有 .started 的那個');
+  const viaDetect = detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '直接驗收再跑spectra' }, { root });
+  assert.equal(viaDetect.why, 'active-change');
+});
+
+test('active-change：沒有標記時只有一個未完成的 change 就綁它；多個取最近修改；全部勾完或在 archive 底下的不算', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'act2-'));
+  const done = mkChange(root, 'openspec/changes', 'old-done', TASKS.replace(/\[ \]/g, '[x]'));
+  mkChange(root, 'openspec/changes/archive', 'archived', TASKS);
+  assert.equal(activeChange(root), null, '全部勾完與 archive 都不算');
+  const a = mkChange(root, 'openspec/changes', 'pending-a', TASKS);
+  assert.ok(activeChange(root).path.endsWith('pending-a/tasks.md'));
+  const b = mkChange(root, 'openspec/changes', 'pending-b', TASKS);
+  fs.utimesSync(a, new Date(1000), new Date(1000)); fs.utimesSync(done, new Date(1000), new Date(1000));
+  assert.ok(activeChange(root).path.endsWith('pending-b/tasks.md'), '取最近修改的');
+  assert.equal(activeChange(undefined), null);
+  assert.equal(activeChange(fs.mkdtempSync(path.join(os.tmpdir(), 'empty-'))), null, '什麼都沒有不報錯');
+});
+
+test('active-change：提示有名稱時走 prompt-name；已綁定的對話不被「猜測」覆蓋', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'act3-'));
+  const t1 = mkChange(root, 'docs/spectra/changes', 'add-named', TASKS);
+  mkChange(root, 'docs/spectra/changes', 'add-other', TASKS);
+  assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '/spectra-apply add-named' }, { root }).why, 'prompt-name');
+  const tr = createSpecTracker({ now: () => 1 });
+  tr.augment({ session_id: 's', hook_event_name: 'PostToolUse', spec_path: t1, spec_why: 'read-tasks', spec_tasks: readSpecTasks(t1) });
+  const guess = tr.augment({ session_id: 's', hook_event_name: 'UserPromptSubmit', spec_path: path.join(root, 'docs/spectra/changes/add-other/tasks.md'), spec_why: 'active-change', spec_tasks: readSpecTasks(path.join(root, 'docs/spectra/changes/add-other/tasks.md')) });
+  assert.equal(guess.spec_tasks, undefined);
+  assert.equal(tr.info()[0].change, 'add-named', '仍是原本綁的那個');
 });

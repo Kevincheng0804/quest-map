@@ -11,6 +11,10 @@ function createSpecTracker({ fs = require('fs'), now = Date.now, minGap = 1000 }
     augment(ev) {
       const id = ev.session_id || 'default', kind = ev.hook_event_name;
       if (kind === 'SessionEnd') { bound.delete(id); delete ev.spec_path; return ev; }
+      if (ev.spec_path && ev.spec_why === 'active-change' && bound.has(id)) {   // 已經綁了任務檔：「進行中的變更」只是猜測，不覆蓋
+        delete ev.spec_path; delete ev.spec_why; delete ev.spec_tasks;
+        return ev;
+      }
       if (ev.spec_path) {   // hook 剛找到的：記住路徑（格式不對就不收）
         const name = specTasksName(ev.spec_path);
         if (name && ev.spec_tasks) bound.set(id, { path: String(ev.spec_path), name, why: String(ev.spec_why || 'hook'), at: now(), ok: true, complete: done(ev.spec_tasks) });
