@@ -23,7 +23,9 @@ function stripPrompt(text) {
   if (open >= 0) t = t.slice(0, open);   // 沒收尾的：從那裡切到結尾
   t = t.replace(/<(ide_[a-z_]+)>[\s\S]*?<\/\1>/g, ' ');
   t = t.replace(/<\/?pasted_content\b[^>]*>/g, ' ');   // 使用者貼上的內容：標籤拿掉，留下裡面的字
-  t = t.replace(/<(task-notification)\b[^>]*>[\s\S]*?<\/\1>/g, ' ');   // 背景工作完成的通知，不是使用者打的
+  // Claude Code 自己塞進來的訊息（背景工作通知、子代理／隊友訊息等），不是使用者打的
+  t = t.replace(/<((?:task|agent|teammate|subagent|system)-[a-z-]+)\b[^>]*>[\s\S]*?<\/\1>/g, ' ');
+  t = t.replace(/^\s*<(?:task|agent|teammate|subagent|system)-[a-z-]+\b[^>]*>[\s\S]*$/, ' ');   // 沒收尾的：整段丟掉
   return t.replace(/\s+/g, ' ').trim();
 }
 const cleanPrompt = text => stripPrompt(text) || tr('prompt.system');

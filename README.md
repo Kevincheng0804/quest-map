@@ -202,7 +202,7 @@ Claude 需要你自己做某件事（更新外掛、實際操作測試、貼資�
 - **這只是路線圖，不會自己前進。** 計畫核准後，Claude 會（外掛已經教它）用待辦清單把步驟列出來並隨進度更新，地圖一收到真正的待辦清單、`quest_plan` 或規格任務檔，就整個換成它，不會殘留舊關卡。
 - 計畫寫法差別很大時，地圖可能選錯段落（例如選到「步驟腳本」而不是工作項目）；這時請 Claude 依規則用待辦清單列出步驟。
 
-另外，背景工作完成的通知（`<task-notification>`）不再被當成你說的話，不會開出名稱是標籤的新世界。
+另外，Claude Code 自己塞進來的訊息（背景工作的 `<task-notification>`、子代理或隊友的 `<agent-message>` 等）不會被當成你說的話，也不會開出名稱是標籤的新世界。
 
 ### 在 Spectra／OpenSpec／Spec Kit 專案使用
 
@@ -211,7 +211,7 @@ Claude 需要你自己做某件事（更新外掛、實際操作測試、貼資�
 - **自動識別**：下面任何一種情況，這個對話就改用任務檔的步驟，不用另外設定：
   1. Claude 讀或改了 `…/changes/<名稱>/tasks.md`、`…/specs/<名稱>/tasks.md`（含 `.kiro/specs`）。
   2. Claude 碰了**同一個 change 資料夾裡的任何檔案**（`proposal.md`、`design.md`、`specs/…`），地圖就取同資料夾的 `tasks.md`。
-  3. 你的那句話裡有 change 名稱（例如 `/spectra-apply add-array-reference-scenario`），地圖會在專案資料夾底下找 `changes/<那個名稱>/tasks.md`（最深 6 層、略過 `node_modules`、`.git` 等）。
+  3. 你的那句話裡有 change 名稱（例如 `/spectra-apply add-array-reference-scenario`），地圖會先直接看常見位置（`docs/spectra/changes`、`openspec/changes`、`.spectra/changes`、`specs` 等），找不到再在專案資料夾底下搜尋 `changes/<那個名稱>/tasks.md`（最深 6 層、略過 `node_modules`、`.git` 等；專案裡檔案再多也不影響）。
 - **之後自動跟著更新**：綁定後，這個對話每個動作（工具、收尾）進來時，地圖最多每 1 秒重讀一次任務檔，所以 Spectra 的介面或指令打勾、Claude 用指令改檔，下一個動作地圖就會跟著變。這個 change 全部完成後，你說下一句新的話，就不再沿用它。
 - **沒用這類工具的專案**：照舊用 Claude 自己拆的待辦，沒有任何改變。
 - **怎麼畫**：`## 1. 標題` 這種分組是一關，分組底下的 `- [ ]` 是小步驟，水位照勾了幾項漲。沒有分組的清單，每個勾選項一關。項目文字很長時，取第一句（「：」或「。」之前）當標題，編號和 `[after: …]` 會去掉。

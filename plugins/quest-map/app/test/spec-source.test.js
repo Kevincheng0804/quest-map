@@ -52,8 +52,11 @@ test('findByName：深度與數量上限', () => {
   fs.mkdirSync(deep, { recursive: true }); fs.writeFileSync(path.join(deep, 'tasks.md'), TASKS);
   assert.equal(findByName(root, 'x-y'), null, '超過 6 層找不到');
   assert.ok(findByName(root, 'x-y', { maxDepth: 12 }));
-  const p = project();
-  assert.equal(findByName(p.root, 'add-array-reference-scenario', { maxEntries: 1 }), null, '數量上限');
+  const odd = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-'));
+  for (const n of ['a', 'b', 'c']) fs.mkdirSync(path.join(odd, n));
+  const hid = path.join(odd, 'c', 'x', 'changes', 'cap-change'); fs.mkdirSync(hid, { recursive: true }); fs.writeFileSync(path.join(hid, 'tasks.md'), TASKS);
+  assert.equal(findByName(odd, 'cap-change', { maxEntries: 2 }), null, '搜尋的數量上限（只算資料夾）');
+  assert.ok(findByName(odd, 'cap-change'));
 });
 
 test('tracker：記住路徑，之後的工具事件重讀最新的清單；1 秒節流；讀失敗沿用上一份', () => {
@@ -105,4 +108,16 @@ test('重讀規格任務檔不會把「等你同意」解除；說話事件裡�
   assert.ok(s.plan().waitingFor);
   s.handle({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, spec_tasks: readSpecTasks(p.tasks) });
   assert.ok(s.plan().waitingFor, '重讀任務檔不會解除等你同意');
+});
+
+test('findByName：專案裡有很多檔案也找得到（常見位置直接看；只算資料夾）', () => {
+  const p = project();
+  const big = path.join(p.root, 'public', 'assets'); fs.mkdirSync(big, { recursive: true });
+  for (let i = 0; i < 4000; i++) fs.writeFileSync(path.join(big, `f${i}.png`), '');
+  assert.ok(findByName(p.root, 'add-array-reference-scenario'), '常見位置');
+  const odd = fs.mkdtempSync(path.join(os.tmpdir(), 'odd-'));
+  const d = path.join(odd, 'public'); fs.mkdirSync(d);
+  for (let i = 0; i < 4000; i++) fs.writeFileSync(path.join(d, `f${i}.png`), '');
+  const dir = path.join(odd, 'tools', 'x', 'changes', 'my-change'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, 'tasks.md'), TASKS);
+  assert.ok(findByName(odd, 'my-change'), '少見的位置，靠搜尋；檔案再多也不吃額度');
 });

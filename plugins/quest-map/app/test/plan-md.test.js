@@ -170,3 +170,17 @@ test('hook.js：ExitPlanMode 只有檔案路徑時，從 .claude/plans 讀檔；
   assert.ok(!JSON.stringify(got[1]).includes('SECRET-TEXT'));
   assert.equal(got[2].plan_md, undefined, 'tool_input.plan 本來就在事件裡，不重送');
 });
+
+test('Claude Code 塞進來的各種系統訊息（agent-message 等）不會開新世界或變成名稱', () => {
+  for (const tag of ['agent-message', 'teammate-message', 'system-notification', 'subagent-result']) {
+    const raw = `<${tag} from="x">做完了</${tag}>`;
+    assert.equal(cleanPrompt(raw), '（系統訊息）', tag);
+    const s = createSession();
+    s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '我的事' });
+    s.handle({ hook_event_name: 'UserPromptSubmit', prompt: raw });
+    assert.equal(s.plan().userSaid, '我的事', tag);
+    assert.equal(s.plan().round, 1, tag);
+  }
+  assert.equal(cleanPrompt('<agent-message from="x">沒收尾'), '（系統訊息）');
+  assert.equal(cleanPrompt('請寫一個 <my-widget> 元件'), '請寫一個 <my-widget> 元件', '使用者自己寫的標籤不動');
+});

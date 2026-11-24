@@ -56,8 +56,15 @@ function siblingTasks(p) {
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'target', '__pycache__', '.venv']);
 // 在專案資料夾底下找 …/changes|specs/<name>/tasks.md（限制深度與數量，免得掃太久）
-function findByName(root, name, { fs = require('fs'), maxDepth = 6, maxEntries = 3000 } = {}) {
+const KNOWN_ROOTS = ['docs/spectra/changes', '.spectra/changes', 'spectra/changes', 'openspec/changes', 'docs/openspec/changes', 'changes', 'docs/changes', '.kiro/specs', 'specs', 'docs/specs'];
+function findByName(root, name, { fs = require('fs'), maxDepth = 6, maxEntries = 20000 } = {}) {
   if (!root || !name) return null;
+  const base = String(root).replace(/[\\/]+$/, '');
+  // 先直接看常見的位置（最快，也不怕專案很大）
+  for (const k of KNOWN_ROOTS) {
+    const t = `${base}/${k}/${name}/tasks.md`;
+    try { if (fs.statSync(t).isFile()) return t; } catch { /* 這個位置沒有 */ }
+  }
   const queue = [[String(root), 0]];
   let seen = 0;
   while (queue.length && seen < maxEntries) {
@@ -65,8 +72,8 @@ function findByName(root, name, { fs = require('fs'), maxDepth = 6, maxEntries =
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const d of entries) {
+      if (!d.isDirectory() || SKIP_DIRS.has(d.name)) continue;   // 只算資料夾：專案裡成千上萬的檔案（素材等）不該把額度用光
       if (++seen > maxEntries) break;
-      if (!d.isDirectory() || SKIP_DIRS.has(d.name)) continue;
       const full = dir.replace(/[\\/]+$/, '') + '/' + d.name;
       if (d.name === name && /(?:^|[\\/])(?:changes|specs)$/i.test(dir)) {
         const t = full + '/tasks.md';
