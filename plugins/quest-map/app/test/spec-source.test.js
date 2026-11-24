@@ -164,3 +164,49 @@ test('active-change：提示有名稱時走 prompt-name；已綁定的對話不�
   assert.equal(guess.spec_tasks, undefined);
   assert.equal(tr.info()[0].change, 'add-named', '仍是原本綁的那個');
 });
+
+const { projectRoots, probe } = require('../spec-tasks');
+const { createStats } = require('../stats');
+
+test('projectRoots：專案、worktree 的主專案、往上最多 3 層', () => {
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'main-'));
+  fs.mkdirSync(path.join(main, '.git', 'worktrees', 'wt'), { recursive: true });
+  const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-'));
+  fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(main, '.git', 'worktrees', 'wt')}\n`);
+  const roots = projectRoots(wt);
+  assert.equal(roots[0], wt.replace(/\\/g, '/'));
+  assert.ok(roots.includes(main.replace(/\\/g, '/')), '含主專案');
+  assert.ok(roots.length <= 5 && roots.length >= 2);
+  assert.deepEqual(projectRoots(undefined), []);
+  const deep = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'deep2-')), 'a', 'b', 'c', 'd'); fs.mkdirSync(deep, { recursive: true });
+  assert.equal(projectRoots(deep).length, 4, '自己加上往上 3 層');
+});
+
+test('detectSpecPath：change 在 worktree 的主專案或上層資料夾時也找得到', () => {
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'main2-'));
+  fs.mkdirSync(path.join(main, '.git', 'worktrees', 'wt'), { recursive: true });
+  const t = mkChange(main, 'docs/spectra/changes', 'add-foreach-scenario', TASKS);
+  const wt = path.join(main, 'wts', 'wt1'); fs.mkdirSync(wt, { recursive: true });
+  fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(main, '.git', 'worktrees', 'wt')}`);
+  const r = detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '/spectra-apply add-foreach-scenario' }, { root: wt });
+  assert.equal(r.why, 'prompt-name');
+  assert.ok(r.path.replace(/\\/g, '/').endsWith('add-foreach-scenario/tasks.md'));
+  const sub = path.join(main, 'src', 'deep'); fs.mkdirSync(sub, { recursive: true });
+  assert.ok(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '/spectra-apply add-foreach-scenario' }, { root: sub }), '從較深的資料夾往上也找得到');
+});
+
+test('probe 與 stats：診斷只有資料夾名稱、版本與數量；specProbe 最多 5 筆；hookVersions 計數', () => {
+  const p = project();
+  const info = probe({ prompt: '/spectra-apply some-name' }, p.root);
+  assert.equal(info.root, path.basename(p.root));
+  assert.ok(info.known.includes('docs/spectra/changes'));
+  assert.equal(info.names, 1);
+  assert.ok(!JSON.stringify(info).includes(p.root.replace(/\\/g, '/')), '不含完整路徑');
+  const st = createStats(() => 1000);
+  for (let i = 0; i < 7; i++) st.record('hook', { hook_event_name: 'UserPromptSubmit', hook: '0.20.3', spec_probe: { root: 'proj', roots: 2, names: 1, known: ['docs/spectra/changes'], started: 0, worktree: false } });
+  st.record('hook', { hook_event_name: 'PostToolUse' });
+  const snap = st.snapshot();
+  assert.equal(snap.specProbe.length, 5);
+  assert.deepEqual(snap.hookVersions, { '0.20.3': 7, old: 1 });
+  assert.ok(!JSON.stringify(snap.specProbe).includes('prompt'));
+});

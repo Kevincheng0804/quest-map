@@ -85,6 +85,29 @@ function findByName(root, name, { fs = require('fs'), maxDepth = 6, maxEntries =
   return null;
 }
 
+// 要找的資料夾清單：專案資料夾、git worktree 的主專案、再往上最多 3 層（Claude 的 cwd 可能比專案深或淺，Spectra 可能在 worktree 裡跑）
+function projectRoots(root, { fs = require('fs') } = {}) {
+  if (!root) return [];
+  const norm = p => String(p).replace(/\\/g, '/').replace(/\/+$/, '');
+  const out = [norm(root)];
+  try {   // worktree 的 .git 是一個檔案：gitdir: <主專案>/.git/worktrees/<名稱>
+    const g = `${out[0]}/.git`;
+    if (fs.statSync(g).isFile()) {
+      const m = fs.readFileSync(g, 'utf8').match(/gitdir:\s*(.+?)\s*$/m);
+      const main = m && norm(m[1]).match(/^(.*)\/\.git\/worktrees\/[^/]+$/);
+      if (main && !out.includes(main[1])) out.push(main[1]);
+    }
+  } catch { /* 不是 worktree */ }
+  let cur = out[0];
+  for (let i = 0; i < 3; i++) {
+    const up = cur.replace(/\/[^/]*$/, '');
+    if (!up || up === cur || /^[A-Za-z]:$/.test(up)) break;
+    if (!out.includes(up)) out.push(up);
+    cur = up;
+  }
+  return out;
+}
+
 // 提示裡沒有名稱、Claude 也還沒碰到檔案時：找「目前進行中」的變更。
 // 1. Spectra 在 .spectra/changes/<名稱>.started 留的進行中標記；2. 常見位置底下還有未勾選項目的 change（排除 archive）。
 // tasks.md 已經全部勾完的不算（那是已完成的變更，不是這一輪的任務）。多個時取最近修改的。
@@ -111,7 +134,7 @@ function activeChange(root, { fs = require('fs') } = {}) {
 }
 
 // 提示裡可能的 change 名稱：kebab-case 的詞（add-array-reference-scenario）
-const promptNames = prompt => [...new Set(String(prompt || '').match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/g) || [])].filter(x => x.length >= 5).slice(0, 5);
+const promptNames = prompt => [...new Set(String(prompt || '').match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/g) || [])].filter(x => x.length >= 5 && !/^(?:spectra|openspec|opsx|speckit)-/i.test(x)).slice(0, 5);   // 指令名稱（/spectra-apply）不是 change 名稱
 
 // 這個事件有沒有指向某個規格任務檔？回傳 { path, why } 或 null。
 // why：read-tasks 直接碰 tasks.md、same-folder 碰同一個 change 資料夾的別的檔案、prompt-name 提示裡有 change 名稱
@@ -125,14 +148,26 @@ function detectSpecPath(ev, { fs = require('fs'), root } = {}) {
       if (sib) { try { if (fs.statSync(sib).isFile()) return { path: sib, why: 'same-folder' }; } catch { /* 沒有 tasks.md */ } }
     }
     if (ev.hook_event_name === 'UserPromptSubmit') {
+      const roots = projectRoots(root, { fs });
       for (const n of promptNames(ev.prompt)) {
-        const t = findByName(root, n, { fs });
-        if (t) return { path: t, why: 'prompt-name' };
+        for (const r of roots) { const t = findByName(r, n, { fs }); if (t) return { path: t, why: 'prompt-name' }; }
       }
-      return activeChange(root, { fs });   // 提示裡沒有名稱：找進行中的變更
+      for (const r of roots) { const a = activeChange(r, { fs }); if (a) return a; }   // 找不到名稱：找進行中的變更
     }
   } catch { /* 找不到就當沒這回事 */ }
   return null;
 }
 
-module.exports = { specTasksName, parseTasks, itemTitle, MAX_BYTES, readSpecTasks, siblingTasks, findByName, promptNames, detectSpecPath, activeChange };
+// 沒找到任務檔時的診斷（只有資料夾名稱、版本、布林與數量，沒有完整路徑與提示內容）
+function probe(ev, root, { fs = require('fs') } = {}) {
+  const roots = projectRoots(root, { fs });
+  const known = [], isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+  for (const r of roots) for (const k of KNOWN_ROOTS) if (isDir(`${r}/${k}`) && !known.includes(k)) known.push(k);
+  let started = 0;
+  for (const r of roots) { try { started += fs.readdirSync(`${r}/.spectra/changes`).filter(f => /\.started$/.test(f)).length; } catch { /* 沒有 */ } }
+  let worktree = false;
+  try { worktree = !!roots[0] && fs.statSync(`${roots[0]}/.git`).isFile(); } catch { /* 不是 */ }
+  return { root: String(roots[0] || '').split('/').pop() || null, roots: roots.length, names: promptNames(ev.prompt).length, known, started, worktree };
+}
+
+module.exports = { projectRoots, probe, specTasksName, parseTasks, itemTitle, MAX_BYTES, readSpecTasks, siblingTasks, findByName, promptNames, detectSpecPath, activeChange };

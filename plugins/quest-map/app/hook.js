@@ -4,7 +4,8 @@
 const http = require('http');
 const fs = require('fs');
 const { isRemote } = require('./runtime');
-const { detectSpecPath, readSpecTasks, MAX_BYTES } = require('./spec-tasks');
+const { detectSpecPath, readSpecTasks, probe, MAX_BYTES } = require('./spec-tasks');
+const HOOK_VERSION = (() => { try { return require('./package.json').version; } catch { return null; } })();
 const { planFileOk } = require('./plan-md');
 // 雲端的工作階段連不到使用者電腦上的地圖，不用等逾時，直接結束
 if (isRemote()) process.exit(0);
@@ -13,9 +14,10 @@ if (isRemote()) process.exit(0);
 function specInfo(ev) {
   const root = process.env.CLAUDE_PROJECT_DIR || ev.cwd;
   const found = detectSpecPath(ev, { fs, root });
-  if (!found) return {};
-  const spec = readSpecTasks(found.path, { fs });
-  return spec ? { spec_tasks: spec, spec_path: found.path, spec_why: found.why } : {};
+  const spec = found ? readSpecTasks(found.path, { fs }) : null;
+  if (spec) return { spec_tasks: spec, spec_path: found.path, spec_why: found.why };
+  // 說話時沒找到任務檔：附上診斷（資料夾名稱與數量），/stats 才看得出為什麼沒抓到
+  return ev.hook_event_name === 'UserPromptSubmit' ? { spec_probe: { ...probe(ev, root, { fs }), foundButUnreadable: !!found } } : {};
 }
 // 計畫模式核准後，計畫文字通常就在 tool_input.plan；沒有的話，從 tool_input／tool_response 找 .claude/plans 底下的檔案路徑讀進來
 function planInfo(ev) {
@@ -42,7 +44,7 @@ process.stdin.on('data', c => { body += c; }).on('end', () => {
   let out = body;
   try {
     const ev = JSON.parse(body);
-    out = JSON.stringify({ ...ev, project_dir: process.env.CLAUDE_PROJECT_DIR || undefined, ...specInfo(ev), ...planInfo(ev) });
+    out = JSON.stringify({ ...ev, project_dir: process.env.CLAUDE_PROJECT_DIR || undefined, hook: HOOK_VERSION, ...specInfo(ev), ...planInfo(ev) });
   } catch { /* 原樣轉送 */ }
   req.end(out);
 });
