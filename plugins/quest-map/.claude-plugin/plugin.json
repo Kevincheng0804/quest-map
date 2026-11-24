@@ -1,7 +1,7 @@
 {
   "name": "quest-map",
   "displayName": "AI 任務闖關地圖",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "桌面上的闖關地圖：用關卡、小機器人和螢幕邊緣的水位顯示 Claude Code 做到哪了、是不是在等你",
   "author": { "name": "Quest Map" },
   "keywords": ["progress", "desktop", "companion", "todo"]

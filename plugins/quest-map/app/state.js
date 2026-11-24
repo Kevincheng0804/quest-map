@@ -2,6 +2,7 @@
 // 把 Claude Code 的 hook 事件，翻成闖關地圖要的計畫 JSON。
 const path = require('path');
 const { t: tr, all } = require('./i18n');
+const { parsePlan } = require('./plan-md');
 
 const short = (s, n) => {
   s = String(s || '').replace(/\s+/g, ' ').trim();
@@ -12,7 +13,8 @@ const grams = t => { const g = new Set(); t = t.toLowerCase().replace(/\s+/g, ''
 const alike = (a, b) => { const x = grams(a), y = grams(b); let n = 0; x.forEach(g => { if (y.has(g)) n++; }); return n / Math.max(Math.min(x.size, y.size), 1) >= 0.5; };
 // 使用者送出的文字常被桌面版或編輯器塞了一些不是使用者打的內容（系統提示、編輯器狀態、排程任務標籤），
 // 顯示前先拿掉，地圖上才會是使用者自己的話。其他原樣保留，不猜別的標籤。
-function cleanPrompt(text) {
+// 清完以後剩什麼；清完是空的回傳 ''（只有系統訊息）
+function stripPrompt(text) {
   let t = String(text == null ? '' : text);
   const sched = t.match(/^\s*<scheduled-task\s+name="([^"]*)"/);
   if (sched) return tr('prompt.sched', { name: sched[1] });
@@ -21,9 +23,10 @@ function cleanPrompt(text) {
   if (open >= 0) t = t.slice(0, open);   // 沒收尾的：從那裡切到結尾
   t = t.replace(/<(ide_[a-z_]+)>[\s\S]*?<\/\1>/g, ' ');
   t = t.replace(/<\/?pasted_content\b[^>]*>/g, ' ');   // 使用者貼上的內容：標籤拿掉，留下裡面的字
-  t = t.replace(/\s+/g, ' ').trim();
-  return t || tr('prompt.system');
+  t = t.replace(/<(task-notification)\b[^>]*>[\s\S]*?<\/\1>/g, ' ');   // 背景工作完成的通知，不是使用者打的
+  return t.replace(/\s+/g, ' ').trim();
 }
+const cleanPrompt = text => stripPrompt(text) || tr('prompt.system');
 const baseName = p => String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop();
 
 // Bash 指令只分類、不顯示內容（指令裡可能有密碼或金鑰）
@@ -171,6 +174,7 @@ function createSession() {
   };
 
   function onPrompt(raw) {
+    if (!stripPrompt(raw)) return;   // 只有系統訊息（例如背景工作的通知）：不當成使用者說話，不開新一輪
     S.promptSeq++;
     const text = cleanPrompt(raw);
     clearWait();
@@ -396,7 +400,13 @@ function createSession() {
         return true;
       }
       case 'PostToolUse': {
+        if (tool === 'ExitPlanMode') {   // 計畫模式的計畫被核准
+          const md = e.plan_md || input.plan;
+          const ok = md && S.prompted ? onPlanMd(String(md)) : false;
+          return clearWait() || ok;
+        }
         if (tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate') {
+          if (S.bound === 'plan') resetFromPlan();   // 真正的待辦清單來了，換掉計畫骨架
           if (!S.bound) S.bound = 'todo';
           const was = cupId();
           if (tool === 'TodoWrite') onTodos(input.todos);
@@ -476,6 +486,7 @@ function createSession() {
       : groups.map((g, i) => ({ title: uniq(short(g.title || tr('step.item', { n: i + 1 }), 24)), items: g.items, done: g.items.every(x => x.done) }));
     const first = units.findIndex(u => !u.done);
     const todos = units.map((u, i) => ({ content: u.title, status: u.done ? 'completed' : i === first ? 'in_progress' : 'pending' }));
+    if (S.bound === 'plan') resetFromPlan();
     const wasBound = S.specBound;
     S.specBound = true; S.bound = 'spec';
     onTodos(todos, true);
@@ -486,6 +497,25 @@ function createSession() {
       S.labels.set(norm(u.title), { title: u.title, tech: tr('tech.spec', { title: u.title }), steps: u.items.map(x => short(x.text, 24)) });
       S.prog.set(lv.id, { done: u.items.filter(x => x.done).length, total: u.items.length });
     });
+    return true;
+  }
+  // 計畫模式核准的計畫：暫時的路線圖（骨架）。之後有真正的待辦清單、quest_plan 或規格任務檔，就整個換掉
+  function resetFromPlan() { S.levels = []; S.labels.clear(); S.prog.clear(); S.specBound = false; S.bound = null; }
+  function onPlanMd(md) {
+    if (S.bound === 'todo' || S.bound === 'spec' || S.bound === 'quest') return false;
+    const parsed = parsePlan(md);
+    if (!parsed.levels.length) return false;
+    const levels = parsed.levels.slice();
+    if (parsed.verify) levels.push({ title: tr('plan.verify'), steps: [] });
+    S.bound = 'plan';
+    onTodos(levels.map((l, i) => ({ content: short(l.title, 24), status: i === 0 ? 'in_progress' : 'pending' })), true);
+    levels.forEach(l => {
+      const lv = S.levels.find(x => x.title === short(l.title, 24));
+      if (!lv || !l.steps.length) return;
+      S.labels.set(norm(lv.title), { title: lv.title, steps: l.steps.map(x => short(x, 24)) });
+      S.prog.set(lv.id, { done: 0, total: l.steps.length });
+    });
+    if (parsed.title) { S.world = short(parsed.title, 12); S.goal = short(parsed.title, 40); }
     return true;
   }
   function startChat(goal) {
@@ -502,6 +532,7 @@ function createSession() {
     applySaid(d.said);
     if (asCode) {
       if (S.bound === 'todo' || S.bound === 'spec') return false;
+      if (S.bound === 'plan') resetFromPlan();
       S.bound = 'quest';
       if (!S.prompted) { S.prompted = true; if (S.solo === 'todo') S.solo = 'doing'; }
       if (d.goal) S.goal = short(d.goal, 36);
@@ -684,4 +715,4 @@ function summarize(plan) {
   return { done, total: act.length, waiting, waitingFor, waitingName, mood, cup, others: Math.max(list.length - 1, 0) };
 }
 
-module.exports = { setLang: require('./i18n').setLang, createHub, createSession, summarize, activityOf, summaryOf, cleanPrompt };
+module.exports = { stripPrompt, setLang: require('./i18n').setLang, createHub, createSession, summarize, activityOf, summaryOf, cleanPrompt };

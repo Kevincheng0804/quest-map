@@ -4,7 +4,8 @@
 const http = require('http');
 const fs = require('fs');
 const { isRemote } = require('./runtime');
-const { detectSpecPath, readSpecTasks } = require('./spec-tasks');
+const { detectSpecPath, readSpecTasks, MAX_BYTES } = require('./spec-tasks');
+const { planFileOk } = require('./plan-md');
 // 雲端的工作階段連不到使用者電腦上的地圖，不用等逾時，直接結束
 if (isRemote()) process.exit(0);
 // 找得到這個事件指向的規格任務檔（OpenSpec／Spectra 等的 tasks.md）時，在本機讀檔、解析，只送分組標題、短標題與勾選狀態；
@@ -15,6 +16,18 @@ function specInfo(ev) {
   if (!found) return {};
   const spec = readSpecTasks(found.path, { fs });
   return spec ? { spec_tasks: spec, spec_path: found.path, spec_why: found.why } : {};
+}
+// 計畫模式核准後，計畫文字通常就在 tool_input.plan；沒有的話，從 tool_input／tool_response 找 .claude/plans 底下的檔案路徑讀進來
+function planInfo(ev) {
+  try {
+    if (ev.tool_name !== 'ExitPlanMode' || (ev.tool_input && ev.tool_input.plan)) return {};
+    const hay = JSON.stringify([ev.tool_input, ev.tool_response]);
+    const m = hay.match(/(?:[A-Za-z]:)?[^"\s]*[\\\/]\.claude[\\\/]plans[\\\/][^"\s]+?\.md/i) || hay.match(/(?:[A-Za-z]:)?[^"]*?\.claude(?:\\\\|\/)plans(?:\\\\|\/)[^"]+?\.md/i);
+    if (!m) return {};
+    const file = m[0].replace(/\\\\/g, '\\');
+    if (!planFileOk(file) || fs.statSync(file).size > MAX_BYTES) return {};
+    return { plan_md: fs.readFileSync(file, 'utf8') };
+  } catch { return {}; }
 }
 let body = '';
 const bye = () => process.exit(0);
@@ -29,7 +42,7 @@ process.stdin.on('data', c => { body += c; }).on('end', () => {
   let out = body;
   try {
     const ev = JSON.parse(body);
-    out = JSON.stringify({ ...ev, project_dir: process.env.CLAUDE_PROJECT_DIR || undefined, ...specInfo(ev) });
+    out = JSON.stringify({ ...ev, project_dir: process.env.CLAUDE_PROJECT_DIR || undefined, ...specInfo(ev), ...planInfo(ev) });
   } catch { /* 原樣轉送 */ }
   req.end(out);
 });
