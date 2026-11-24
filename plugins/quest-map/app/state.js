@@ -189,9 +189,9 @@ function createSession() {
   }
 
   // TodoWrite：每次都給整份清單，用內容比對前後差異
-  function onTodos(list) {
+  function onTodos(list, keepWait) {
     if (!Array.isArray(list)) return;
-    clearWait();
+    if (!keepWait) clearWait();   // 規格任務檔的重讀不該把「等你同意」解除
     const nameOf = t => splitUser(t.content || t.subject || '').title;
     if (allDone() && list.length && !list.some(t => S.levels.some(l => l.title === nameOf(t)))) archive();
     const old = S.levels, oldActive = real(), hadPlan = oldActive.length > 0;
@@ -384,10 +384,10 @@ function createSession() {
     const tool = e.tool_name, input = e.tool_input || {};
     const isTodoTool = tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate';
     if ((S.specBound || S.bound === 'quest') && isTodoTool) return false;   // 這個對話以規格任務檔（或 quest_plan）為準
-    const spec = e.spec_tasks && S.prompted ? onSpecTasks(e.spec_tasks) : false;
+    const spec = e.spec_tasks && S.prompted && e.hook_event_name !== 'UserPromptSubmit' && e.hook_event_name !== 'Notification' ? onSpecTasks(e.spec_tasks) : false;
     switch (e.hook_event_name) {
       case 'SessionStart': return true;
-      case 'UserPromptSubmit': onPrompt(e.prompt || ''); return true;
+      case 'UserPromptSubmit': onPrompt(e.prompt || ''); if (e.spec_tasks) onSpecTasks(e.spec_tasks); return true;
       case 'PreToolUse': {
         // 工具要開始跑：只更新「現在在做什麼」。清單類工具（TodoWrite、Task*）等 PostToolUse 才處理，不然會重複建關卡
         const a = S.prompted ? activityOf(tool, input) : null;   // 還沒下過指令時不顯示動作
@@ -478,7 +478,7 @@ function createSession() {
     const todos = units.map((u, i) => ({ content: u.title, status: u.done ? 'completed' : i === first ? 'in_progress' : 'pending' }));
     const wasBound = S.specBound;
     S.specBound = true; S.bound = 'spec';
-    onTodos(todos);
+    onTodos(todos, true);
     if (d.name && !wasBound) S.world = short(d.name, 12);   // 第一次綁定：世界名稱用任務資料夾名稱
     if (!flat) units.forEach(u => {
       const lv = S.levels.find(l => l.title === u.title);

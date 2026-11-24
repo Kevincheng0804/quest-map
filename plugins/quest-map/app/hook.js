@@ -4,18 +4,17 @@
 const http = require('http');
 const fs = require('fs');
 const { isRemote } = require('./runtime');
-const { specTasksName, parseTasks, MAX_BYTES } = require('./spec-tasks');
+const { detectSpecPath, readSpecTasks } = require('./spec-tasks');
 // 雲端的工作階段連不到使用者電腦上的地圖，不用等逾時，直接結束
 if (isRemote()) process.exit(0);
-// Claude 讀或改規格工具的任務檔（OpenSpec／Spectra 等的 tasks.md）時，在本機讀檔、解析，只送分組標題、短標題與勾選狀態
-function specTasks(ev) {
-  try {
-    if (!['Read', 'Edit', 'Write', 'MultiEdit'].includes(ev.tool_name)) return undefined;
-    const file = ev.tool_input && ev.tool_input.file_path, name = specTasksName(file);
-    if (!name || fs.statSync(file).size > MAX_BYTES) return undefined;
-    const { groups } = parseTasks(fs.readFileSync(file, 'utf8'));
-    return groups.length ? { name, groups } : undefined;
-  } catch { return undefined; }   // 讀不到就當沒這回事，不影響 Claude Code
+// 找得到這個事件指向的規格任務檔（OpenSpec／Spectra 等的 tasks.md）時，在本機讀檔、解析，只送分組標題、短標題與勾選狀態；
+// 另外送 spec_path 讓地圖記住（只在本機用來之後重讀，不會顯示或輸出）
+function specInfo(ev) {
+  const root = process.env.CLAUDE_PROJECT_DIR || ev.cwd;
+  const found = detectSpecPath(ev, { fs, root });
+  if (!found) return {};
+  const spec = readSpecTasks(found.path, { fs });
+  return spec ? { spec_tasks: spec, spec_path: found.path, spec_why: found.why } : {};
 }
 let body = '';
 const bye = () => process.exit(0);
@@ -30,7 +29,7 @@ process.stdin.on('data', c => { body += c; }).on('end', () => {
   let out = body;
   try {
     const ev = JSON.parse(body);
-    out = JSON.stringify({ ...ev, project_dir: process.env.CLAUDE_PROJECT_DIR || undefined, spec_tasks: specTasks(ev) });
+    out = JSON.stringify({ ...ev, project_dir: process.env.CLAUDE_PROJECT_DIR || undefined, ...specInfo(ev) });
   } catch { /* 原樣轉送 */ }
   req.end(out);
 });

@@ -7,6 +7,8 @@ const { createHub, summarize, setLang } = require('./state');
 const I18n = require('./i18n');
 const { snapBattery, placeBattery, fitsDisplay, edgeBounds } = require('./placement');
 const opener = require('./opener');
+const { createSpecTracker } = require('./spec-source');
+const specTracker = createSpecTracker();
 const { createStats } = require('./stats');
 
 if (process.env.QUEST_PET_USERDATA) app.setPath('userData', process.env.QUEST_PET_USERDATA);
@@ -143,7 +145,7 @@ function startServer() {
     if (req.method === 'GET' && req.url === '/plan') return done(200, JSON.stringify(lastPlan));
     // 排查用：收到了哪些事件、有沒有收到連線測試（只有次數與名稱，沒有指令內容）
     if (req.method === 'GET' && req.url === '/version') return done(200, JSON.stringify({ version: VERSION, startedAt }));
-    if (req.method === 'GET' && req.url === '/stats') return done(200, JSON.stringify({ ...stats.snapshot(), ignoredScheduled: hub.ignoredCount(), sessionList: hub.list() }, null, 2));
+    if (req.method === 'GET' && req.url === '/stats') return done(200, JSON.stringify({ ...stats.snapshot(), ignoredScheduled: hub.ignoredCount(), specBound: specTracker.info(), sessionList: hub.list() }, null, 2));
     if (req.method !== 'POST') return done(404);
     let body = '';
     req.on('data', c => { body += c; if (body.length > 4e6) req.destroy(); });
@@ -152,6 +154,7 @@ function startServer() {
       try { data = JSON.parse(body); } catch { return done(400); }
       if (process.env.QUEST_PET_DEBUG) fs.appendFileSync(path.join(app.getPath('userData'), 'events.log'), body + '\n');
       if (req.url === '/hook') {
+        specTracker.augment(data);   // 綁了規格任務檔的對話：補上最新的任務清單
         stats.record('hook', data);
         // 新的一句話會讓地圖回到自動模式
         if (data.hook_event_name === 'UserPromptSubmit') override = false;

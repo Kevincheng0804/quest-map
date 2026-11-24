@@ -29,10 +29,10 @@ test('路徑辨識：OpenSpec／Spectra、Spec Kit、Kiro 的 tasks.md', () => {
   assert.equal(specTasksName('/w/changes/x/design.md'), null);
 });
 
-test('項目標題：去掉編號與 [after]，取第一句，最長 30 字', () => {
+test('項目標題：去掉編號與 [after]，取第一句，最長 36 字', () => {
   assert.equal(itemTitle('1.1 [after: 1.0] 建立骨架：很長的說明'), '建立骨架');
   assert.equal(itemTitle('T001 Setup project. then more'), 'Setup project. then more');
-  assert.equal(itemTitle('2.3 ' + '字'.repeat(60)).length, 30);
+  assert.equal(itemTitle('2.3 ' + '字'.repeat(60)).length, 36);
 });
 
 test('解析：分組、勾選狀態、大小寫與其他清單符號', () => {

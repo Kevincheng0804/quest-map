@@ -196,7 +196,11 @@ Claude 需要你自己做某件事（更新外掛、實際操作測試、貼資�
 
 這類「規格驅動」工具會把步驟寫在檔案裡（`changes/<名稱>/tasks.md` 的 `- [ ]` 勾選清單），而不是 Claude Code 的待辦清單。地圖會自動認得：
 
-- **自動識別**：Claude 讀或改了 `…/changes/<名稱>/tasks.md`、`…/specs/<名稱>/tasks.md`（含 `.kiro/specs`），這個對話就改用它的步驟。你呼叫了這類工具，Claude 一定會讀這個檔案，不用另外設定。
+- **自動識別**：下面任何一種情況，這個對話就改用任務檔的步驟，不用另外設定：
+  1. Claude 讀或改了 `…/changes/<名稱>/tasks.md`、`…/specs/<名稱>/tasks.md`（含 `.kiro/specs`）。
+  2. Claude 碰了**同一個 change 資料夾裡的任何檔案**（`proposal.md`、`design.md`、`specs/…`），地圖就取同資料夾的 `tasks.md`。
+  3. 你的那句話裡有 change 名稱（例如 `/spectra-apply add-array-reference-scenario`），地圖會在專案資料夾底下找 `changes/<那個名稱>/tasks.md`（最深 6 層、略過 `node_modules`、`.git` 等）。
+- **之後自動跟著更新**：綁定後，這個對話每個動作（工具、收尾）進來時，地圖最多每 1 秒重讀一次任務檔，所以 Spectra 的介面或指令打勾、Claude 用指令改檔，下一個動作地圖就會跟著變。這個 change 全部完成後，你說下一句新的話，就不再沿用它。
 - **沒用這類工具的專案**：照舊用 Claude 自己拆的待辦，沒有任何改變。
 - **怎麼畫**：`## 1. 標題` 這種分組是一關，分組底下的 `- [ ]` 是小步驟，水位照勾了幾項漲。沒有分組的清單，每個勾選項一關。項目文字很長時，取第一句（「：」或「。」之前）當標題，編號和 `[after: …]` 會去掉。
 - **隱私**：外掛的 hook 只在你的電腦上讀這個檔案，只取分組標題、短標題和勾選狀態送給地圖，不送其他內容。
@@ -296,7 +300,8 @@ Cowork 沒有辦法像 Claude Code 那樣自動同步（實測：Cowork 的 hook
 ### 規格任務檔
 
 - 只認 `changes/<名稱>/tasks.md`、`specs/<名稱>/tasks.md` 這類路徑，以及 `- [ ]`／`- [x]` 勾選格式。別的工具的任務檔（例如 Taskmaster 的 JSON）不支援。
-- 地圖是在 Claude 讀或改這個檔案時才更新。你自己在編輯器裡勾選，要等 Claude 下一次動到它才會看到。
+- 地圖是在這個對話有新的動作時才重讀任務檔。你自己在編輯器或 Spectra 介面裡勾選，要等 Claude 下一個動作才會看到；Claude 完全沒有動作時不會更新。
+- 偵測要靠「Claude 碰到那個 change 資料夾」或「你的話裡有 change 名稱」。兩者都沒有時（例如 Claude 只用指令、你也沒打名稱），地圖找不到任務檔。排查：`http://127.0.0.1:47600/stats` 的 `specBound` 會列出綁到的 change、原因（`read-tasks`、`same-folder`、`prompt-name`、`refresh`）與上次讀檔是否成功，不含路徑和項目文字。
 - 這個對話一旦用了任務檔，同一個對話裡 Claude 另外列的待辦清單就不再顯示（免得重複）。
 
 ### 語言
