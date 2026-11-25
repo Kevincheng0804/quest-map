@@ -1316,3 +1316,14 @@ test('排程任務：被忽略的編號有上限，不會無限成長', () => {
   assert.equal(hub.ignoredCount(), 600);
   assert.equal(hub.handle({ hook_event_name: 'UserPromptSubmit', session_id: 's599', prompt: 'hi' }), false, '最近的仍被忽略');
 });
+
+test('Spectra 有多個進行中的變更、還沒對上：「處理你的要求」說明「還不確定」，綁定後消失', () => {
+  const s = createSession();
+  s.handle({ hook_event_name: 'UserPromptSubmit', prompt: '改設計', spec_ambiguous: 2 });
+  assert.match(s.plan().levels[0].plain, /Spectra 有 2 個進行中的變更/);
+  s.handle({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: '/a/b.ts' }, spec_tasks: { name: 'c', groups: [{ title: '一', items: [{ text: 'x', done: false }] }] } });
+  assert.equal(s.plan().levels[0].title, '一');
+  const t = createSession();
+  t.handle({ hook_event_name: 'UserPromptSubmit', prompt: '改設計' });
+  assert.match(t.plan().levels[0].plain, /沒有列出步驟清單/, '沒有 ambiguous 時照舊');
+});

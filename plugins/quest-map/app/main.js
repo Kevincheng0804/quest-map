@@ -145,7 +145,7 @@ function startServer() {
     if (req.method === 'GET' && req.url === '/plan') return done(200, JSON.stringify(lastPlan));
     // 排查用：收到了哪些事件、有沒有收到連線測試（只有次數與名稱，沒有指令內容）
     if (req.method === 'GET' && req.url === '/version') return done(200, JSON.stringify({ version: VERSION, startedAt }));
-    if (req.method === 'GET' && req.url === '/stats') return done(200, JSON.stringify({ ...stats.snapshot(), ignoredScheduled: hub.ignoredCount(), specBound: specTracker.info(), sessionList: hub.list() }, null, 2));
+    if (req.method === 'GET' && req.url === '/stats') return done(200, JSON.stringify({ ...stats.snapshot(), ignoredScheduled: hub.ignoredCount(), specBound: specTracker.info(), specAmbiguous: specTracker.ambiguous(), sessionList: hub.list() }, null, 2));
     if (req.method !== 'POST') return done(404);
     let body = '';
     req.on('data', c => { body += c; if (body.length > 4e6) req.destroy(); });

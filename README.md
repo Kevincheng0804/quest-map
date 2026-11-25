@@ -212,7 +212,10 @@ Claude 需要你自己做某件事（更新外掛、實際操作測試、貼資�
   1. Claude 讀或改了 `…/changes/<名稱>/tasks.md`、`…/specs/<名稱>/tasks.md`（含 `.kiro/specs`）。
   2. Claude 碰了**同一個 change 資料夾裡的任何檔案**（`proposal.md`、`design.md`、`specs/…`），地圖就取同資料夾的 `tasks.md`。
   3. 你的那句話裡有 change 名稱（例如 `/spectra-apply add-array-reference-scenario`），地圖會先直接看常見位置（`docs/spectra/changes`、`openspec/changes`、`.spectra/changes`、`specs` 等），找不到再在專案資料夾底下搜尋 `changes/<那個名稱>/tasks.md`（最深 6 層、略過 `node_modules`、`.git` 等；專案裡檔案再多也不影響）。
-  4. 以上都沒有（你的話裡沒打名稱、Claude 也還沒碰到檔案）時，地圖在你說話的當下找「進行中的變更」：先看 Spectra 的 `.spectra/changes/<名稱>.started` 標記，沒有的話看常見位置底下還有未勾選項目的 change（排除 `archive`）。任務已經全部勾完的不算；有多個時取最近修改的那個。
+  4. 以上都沒有（你的話裡沒打名稱、Claude 也還沒碰到檔案）時，地圖在你說話的當下找「進行中的變更」：先看 Spectra 的 `.spectra/changes/<名稱>.started` 標記，再看常見位置底下還有未勾選項目的 change（排除 `archive`）。任務已經全部勾完的不算。
+     - **剛好一個**：就綁它。
+     - **兩個以上：不猜。** 「處理你的要求」那一關會寫「Spectra 有 N 個進行中的變更，我還不確定你在做哪一個」，等 Claude 開始改檔，只要它改的檔案（檔名或最後兩層路徑）**只出現在其中一個變更的 `tasks.md` 裡**，地圖就綁那一個。
+  線索強弱：碰到 `tasks.md` ＞ 話裡有 change 名稱 ＞ 碰到同資料夾的檔案 ＞ 改的檔案對得上任務內容 ＞ 只有一個進行中。強的會換掉弱的，弱的不會蓋掉強的。
   找的範圍：專案資料夾、git worktree 的主專案、再往上最多 3 層的上層資料夾。
 - **之後自動跟著更新**：綁定後，這個對話每個動作（工具、收尾）進來時，地圖最多每 1 秒重讀一次任務檔，所以 Spectra 的介面或指令打勾、Claude 用指令改檔，下一個動作地圖就會跟著變。這個 change 全部完成後，你說下一句新的話，就不再沿用它。
 - **沒用這類工具的專案**：照舊用 Claude 自己拆的待辦，沒有任何改變。
@@ -315,6 +318,7 @@ Cowork 沒有辦法像 Claude Code 那樣自動同步（實測：Cowork 的 hook
 
 - 只認 `changes/<名稱>/tasks.md`、`specs/<名稱>/tasks.md` 這類路徑，以及 `- [ ]`／`- [x]` 勾選格式。別的工具的任務檔（例如 Taskmaster 的 JSON）不支援。
 - 地圖是在這個對話有新的動作時才重讀任務檔。你自己在編輯器或 Spectra 介面裡勾選，要等 Claude 下一個動作才會看到；Claude 完全沒有動作時不會更新。
+- 同時有好幾個進行中的變更、你的話裡又沒打名稱時，要等 Claude 改到「只寫在其中一個變更任務裡的檔案」才對得上；任務項目沒寫檔名的話可能一直對不上，這時畫面會維持「還不確定」。在話裡打上 change 名稱最準。
 - 偵測要靠「Claude 碰到那個 change 資料夾」或「你的話裡有 change 名稱」。兩者都沒有時（例如 Claude 只用指令、你也沒打名稱），地圖找不到任務檔。沒找到任務檔時，`/stats` 的 `specProbe`（最近 5 筆）會說明地圖在哪裡找過：`root` 是專案資料夾名稱、`known` 是找到哪些常見位置、`started` 是 `.started` 標記數、`worktree` 是不是 git worktree、`names` 是你的話裡有幾個像 change 名稱的詞；`hookVersions` 顯示各版本的 hook 各送了幾個事件，有 `old` 或舊版本代表那個對話是更新前開的，要**開新對話**才會套用新的 hook。
 - 排查：`http://127.0.0.1:47600/stats` 的 `specBound` 會列出綁到的 change、原因（`read-tasks`、`same-folder`、`prompt-name`、`refresh`）與上次讀檔是否成功，不含路徑和項目文字。
 - 這個對話一旦用了任務檔，同一個對話裡 Claude 另外列的待辦清單就不再顯示（免得重複）。

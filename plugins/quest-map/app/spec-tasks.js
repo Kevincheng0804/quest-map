@@ -111,26 +111,50 @@ function projectRoots(root, { fs = require('fs') } = {}) {
 // 提示裡沒有名稱、Claude 也還沒碰到檔案時：找「目前進行中」的變更。
 // 1. Spectra 在 .spectra/changes/<名稱>.started 留的進行中標記；2. 常見位置底下還有未勾選項目的 change（排除 archive）。
 // tasks.md 已經全部勾完的不算（那是已完成的變更，不是這一輪的任務）。多個時取最近修改的。
-function activeChange(root, { fs = require('fs') } = {}) {
-  if (!root) return null;
-  const base = String(root).replace(/[\\/]+$/, '');
+// 所有「進行中」的候選變更（tasks.md 還有未勾選項目）：Spectra 的 .started 標記指到的，加上常見位置底下的 change（排除 archive）。
+// 已經全部勾完的不算；依最近修改排序。
+function activeCandidates(roots, { fs = require('fs') } = {}) {
+  const list = Array.isArray(roots) ? roots : [roots];
   const mt = p => { try { return fs.statSync(p).mtimeMs; } catch { return 0; } };
   const pending = t => { const spec = readSpecTasks(t, { fs }); return !!spec && spec.groups.some(g => g.items.some(i => !i.done)); };
-  const started = [];
-  try { for (const f of fs.readdirSync(`${base}/.spectra/changes`)) if (/\.started$/.test(f)) started.push({ name: f.replace(/\.started$/, ''), at: mt(`${base}/.spectra/changes/${f}`) }); } catch { /* 沒有標記 */ }
-  started.sort((a, b) => b.at - a.at);
-  for (const c of started) { const t = findByName(base, c.name, { fs }); if (t && pending(t)) return { path: t, why: 'active-change' }; }
-  const found = [];
-  for (const k of ['docs/spectra/changes', 'openspec/changes', '.spectra/changes', 'spectra/changes', 'changes']) {
-    let dirs; try { dirs = fs.readdirSync(`${base}/${k}`, { withFileTypes: true }); } catch { continue; }
-    for (const d of dirs) {
-      if (!d.isDirectory() || /^archive/i.test(d.name)) continue;
-      const t = `${base}/${k}/${d.name}/tasks.md`, at = mt(t);
-      if (at && pending(t)) found.push({ path: t, at });
+  const out = new Map();
+  for (const root of list) {
+    if (!root) continue;
+    const base = String(root).replace(/[\\/]+$/, '');
+    try {
+      for (const f of fs.readdirSync(`${base}/.spectra/changes`)) {
+        if (!/\.started$/.test(f)) continue;
+        const t = findByName(base, f.replace(/\.started$/, ''), { fs });
+        if (t && !out.has(t) && pending(t)) out.set(t, mt(t));
+      }
+    } catch { /* 沒有標記 */ }
+    for (const k of ['docs/spectra/changes', 'openspec/changes', '.spectra/changes', 'spectra/changes', 'changes']) {
+      let dirs; try { dirs = fs.readdirSync(`${base}/${k}`, { withFileTypes: true }); } catch { continue; }
+      for (const d of dirs) {
+        if (!d.isDirectory() || /^archive/i.test(d.name)) continue;
+        const t = `${base}/${k}/${d.name}/tasks.md`;
+        if (!out.has(t) && mt(t) && pending(t)) out.set(t, mt(t));
+      }
     }
   }
-  found.sort((a, b) => b.at - a.at);
-  return found[0] ? { path: found[0].path, why: 'active-change' } : null;
+  return [...out.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
+}
+// 剛好一個候選才綁（why active-change）；兩個以上不猜，回報 { ambiguous, candidates }
+function activeChange(roots, opts = {}) {
+  const c = activeCandidates(roots, opts);
+  if (c.length === 1) return { path: c[0], why: 'active-change' };
+  return c.length > 1 ? { ambiguous: c.length, candidates: c.slice(0, 8) } : null;
+}
+
+// 被碰的檔案，有沒有寫在這份 tasks.md 的原文裡（最後兩段路徑，或夠長、不普通的檔名）
+const COMMON_FILES = new Set(['index.ts', 'index.js', 'index.tsx', 'index.jsx', 'main.ts', 'main.js', 'readme.md', 'package.json', 'package-lock.json', 'tsconfig.json', 'style.css', 'styles.css', 'app.tsx', 'app.ts', 'app.js']);
+function mentionsFile(text, file) {
+  const parts = String(file || '').replace(/\\/g, '/').split('/').filter(Boolean);
+  const base = (parts[parts.length - 1] || '').toLowerCase();
+  if (!base) return false;
+  const hay = String(text || '').replace(/\\/g, '/').toLowerCase();
+  if (parts.length >= 2 && hay.includes((parts[parts.length - 2] + '/' + parts[parts.length - 1]).toLowerCase())) return true;
+  return base.length >= 6 && !COMMON_FILES.has(base) && hay.includes(base);
 }
 
 // 提示裡可能的 change 名稱：kebab-case 的詞（add-array-reference-scenario）
@@ -152,7 +176,7 @@ function detectSpecPath(ev, { fs = require('fs'), root } = {}) {
       for (const n of promptNames(ev.prompt)) {
         for (const r of roots) { const t = findByName(r, n, { fs }); if (t) return { path: t, why: 'prompt-name' }; }
       }
-      for (const r of roots) { const a = activeChange(r, { fs }); if (a) return a; }   // 找不到名稱：找進行中的變更
+      return activeChange(roots, { fs });   // 找不到名稱：找進行中的變更（兩個以上不猜）
     }
   } catch { /* 找不到就當沒這回事 */ }
   return null;
@@ -170,4 +194,4 @@ function probe(ev, root, { fs = require('fs') } = {}) {
   return { root: String(roots[0] || '').split('/').pop() || null, roots: roots.length, names: promptNames(ev.prompt).length, known, started, worktree };
 }
 
-module.exports = { projectRoots, probe, specTasksName, parseTasks, itemTitle, MAX_BYTES, readSpecTasks, siblingTasks, findByName, promptNames, detectSpecPath, activeChange };
+module.exports = { activeCandidates, mentionsFile, projectRoots, probe, specTasksName, parseTasks, itemTitle, MAX_BYTES, readSpecTasks, siblingTasks, findByName, promptNames, detectSpecPath, activeChange };

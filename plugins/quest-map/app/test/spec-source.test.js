@@ -126,31 +126,29 @@ test('findByName：專案裡有很多檔案也找得到（常見位置直接看�
 const { activeChange } = require('../spec-tasks');
 const mkChange = (root, rel, name, text) => { const d = path.join(root, ...rel.split('/'), name); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, 'tasks.md'), text); return path.join(d, 'tasks.md'); };
 
-test('active-change：Spectra 的 .started 標記指出進行中的變更', () => {
+test('active-change：只有一個進行中的變更才綁；兩個以上不猜，回報候選', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'act-'));
-  mkChange(root, 'docs/spectra/changes', 'add-a', TASKS);
   mkChange(root, 'docs/spectra/changes', 'add-b', TASKS);
   fs.mkdirSync(path.join(root, '.spectra', 'changes'), { recursive: true });
   fs.writeFileSync(path.join(root, '.spectra', 'changes', 'add-b.started'), '');
-  const r = activeChange(root);
-  assert.equal(r.why, 'active-change');
-  assert.ok(r.path.replace(/\\/g, '/').endsWith('add-b/tasks.md'), '取有 .started 的那個');
-  const viaDetect = detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '直接驗收再跑spectra' }, { root });
-  assert.equal(viaDetect.why, 'active-change');
+  const one = activeChange(root);
+  assert.equal(one.why, 'active-change'); assert.ok(one.path.replace(/\\/g, '/').endsWith('add-b/tasks.md'));
+  assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '直接驗收再跑spectra' }, { root }).why, 'active-change');
+  mkChange(root, 'docs/spectra/changes', 'add-a', TASKS);
+  const two = activeChange(root);
+  assert.equal(two.ambiguous, 2); assert.equal(two.candidates.length, 2); assert.equal(two.path, undefined);
+  assert.equal(detectSpecPath({ hook_event_name: 'UserPromptSubmit', prompt: '改一下設計' }, { root }).ambiguous, 2);
 });
 
-test('active-change：沒有標記時只有一個未完成的 change 就綁它；多個取最近修改；全部勾完或在 archive 底下的不算', () => {
+test('active-change：全部勾完或在 archive 底下的不算候選；什麼都沒有不報錯', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'act2-'));
-  const done = mkChange(root, 'openspec/changes', 'old-done', TASKS.replace(/\[ \]/g, '[x]'));
+  mkChange(root, 'openspec/changes', 'old-done', TASKS.replace(/\[ \]/g, '[x]'));
   mkChange(root, 'openspec/changes/archive', 'archived', TASKS);
   assert.equal(activeChange(root), null, '全部勾完與 archive 都不算');
-  const a = mkChange(root, 'openspec/changes', 'pending-a', TASKS);
+  mkChange(root, 'openspec/changes', 'pending-a', TASKS);
   assert.ok(activeChange(root).path.endsWith('pending-a/tasks.md'));
-  const b = mkChange(root, 'openspec/changes', 'pending-b', TASKS);
-  fs.utimesSync(a, new Date(1000), new Date(1000)); fs.utimesSync(done, new Date(1000), new Date(1000));
-  assert.ok(activeChange(root).path.endsWith('pending-b/tasks.md'), '取最近修改的');
   assert.equal(activeChange(undefined), null);
-  assert.equal(activeChange(fs.mkdtempSync(path.join(os.tmpdir(), 'empty-'))), null, '什麼都沒有不報錯');
+  assert.equal(activeChange(fs.mkdtempSync(path.join(os.tmpdir(), 'empty-'))), null);
 });
 
 test('active-change：提示有名稱時走 prompt-name；已綁定的對話不被「猜測」覆蓋', () => {
@@ -209,4 +207,67 @@ test('probe 與 stats：診斷只有資料夾名稱、版本與數量；specProb
   assert.equal(snap.specProbe.length, 5);
   assert.deepEqual(snap.hookVersions, { '0.20.3': 7, old: 1 });
   assert.ok(!JSON.stringify(snap.specProbe).includes('prompt'));
+});
+
+
+const { mentionsFile, activeCandidates } = require('../spec-tasks');
+const TASKS_A = '## 1. 環繞鏡頭\n- [x] 1.1 軌道鏡頭：新增 src/camera/orbit.ts\n- [ ] 1.2 接進流程：改 src/flow/strike.ts\n';
+const TASKS_B = '## 1. 投手重新設計\n- [x] 1.1 重做模型：改 src/pitcher/chibi.ts 與 tests/chibi.test.ts\n- [ ] 1.2 貼圖：src/pitcher/texture.ts\n';
+function twoChanges() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'two-'));
+  const a = mkChange(root, 'docs/spectra/changes', 'add-strike-orbit-shot', TASKS_A);
+  const b = mkChange(root, 'docs/spectra/changes', 'redesign-realistic-pitcher', TASKS_B);
+  return { root, a, b };
+}
+
+test('mentionsFile：最後兩段路徑或夠長的檔名；太普通的檔名不算', () => {
+  assert.ok(mentionsFile(TASKS_B, 'C:\\p\\src\\pitcher\\chibi.ts'));
+  assert.ok(mentionsFile(TASKS_B, '/x/tests/chibi.test.ts'));
+  assert.equal(mentionsFile(TASKS_B, '/x/src/index.ts'), false);
+  assert.equal(mentionsFile('改 index.ts', '/x/src/index.ts'), false, 'index.ts 太普通');
+  assert.ok(mentionsFile('改 src/main.ts', '/x/src/main.ts'), '有一層資料夾就算');
+  assert.equal(mentionsFile(TASKS_A, ''), false);
+});
+
+test('file-match：兩個進行中的變更，Claude 改的檔案只出現在 B → 綁 B；之後的更新跟著 B', () => {
+  const { root, a, b } = twoChanges();
+  const tr = createSpecTracker({ now: () => 1_000_000 });
+  const found = detectSpecPath({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '之前 3D 投手的設計我不太喜歡' }, { root });
+  assert.equal(found.ambiguous, 2);
+  const e1 = tr.augment({ session_id: 's', hook_event_name: 'UserPromptSubmit', spec_ambiguous: found.ambiguous, spec_candidates: found.candidates });
+  assert.equal(e1.spec_ambiguous, 2, '沒綁時告訴地圖「有 2 個，還不確定」');
+  assert.equal(e1.spec_candidates, undefined, '候選路徑不往下傳');
+  const e2 = tr.augment({ session_id: 's', hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: path.join(root, 'src', 'pitcher', 'chibi.ts') } });
+  assert.equal(e2.spec_tasks.name, 'redesign-realistic-pitcher');
+  assert.deepEqual(tr.info(), [{ change: 'redesign-realistic-pitcher', why: 'file-match', ok: true }]);
+  assert.deepEqual(tr.ambiguous(), []);
+  fs.writeFileSync(b, TASKS_B.replace('- [ ]', '- [x]'));
+  const e3 = tr.augment({ session_id: 's', hook_event_name: 'PostToolUse', tool_name: 'Bash' });
+  assert.equal(e3, e3); assert.equal(tr.info()[0].why, 'file-match');
+});
+
+test('file-match：檔案出現在兩個變更、或兩個都沒有，都不綁；已用強線索綁定時不被換掉', () => {
+  const { root } = twoChanges();
+  const tr = createSpecTracker({ now: () => 1 });
+  const cand = activeCandidates(root);
+  tr.augment({ session_id: 's', hook_event_name: 'UserPromptSubmit', spec_ambiguous: 2, spec_candidates: cand });
+  assert.equal(tr.augment({ session_id: 's', hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: '/p/src/other/unknown.ts' } }).spec_tasks, undefined);
+  assert.deepEqual(tr.ambiguous(), [2]);
+  const strong = createSpecTracker({ now: () => 1 });
+  const aPath = cand.find(p => p.includes('add-strike-orbit-shot'));
+  strong.augment({ session_id: 's', hook_event_name: 'UserPromptSubmit', spec_ambiguous: 2, spec_candidates: cand });
+  strong.augment({ session_id: 's', hook_event_name: 'PostToolUse', spec_path: aPath, spec_why: 'prompt-name', spec_tasks: readSpecTasks(aPath) });
+  const ev = strong.augment({ session_id: 's', hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: '/p/src/pitcher/chibi.ts' } });
+  assert.equal(ev.spec_tasks, undefined);
+  assert.equal(strong.info()[0].change, 'add-strike-orbit-shot');
+});
+
+test('強度：弱線索（active-change）會被更強的換掉；弱的不會蓋掉強的', () => {
+  const { root, a, b } = twoChanges();
+  const tr = createSpecTracker({ now: () => 1 });
+  tr.augment({ session_id: 's', hook_event_name: 'UserPromptSubmit', spec_path: a, spec_why: 'active-change', spec_tasks: readSpecTasks(a) });
+  tr.augment({ session_id: 's', hook_event_name: 'PostToolUse', spec_path: b, spec_why: 'same-folder', spec_tasks: readSpecTasks(b) });
+  assert.equal(tr.info()[0].change, 'redesign-realistic-pitcher');
+  tr.augment({ session_id: 's', hook_event_name: 'UserPromptSubmit', spec_path: a, spec_why: 'active-change', spec_tasks: readSpecTasks(a) });
+  assert.equal(tr.info()[0].change, 'redesign-realistic-pitcher', '猜測不會蓋掉強線索');
 });

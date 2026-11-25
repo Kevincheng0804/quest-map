@@ -14,6 +14,7 @@ if (isRemote()) process.exit(0);
 function specInfo(ev) {
   const root = process.env.CLAUDE_PROJECT_DIR || ev.cwd;
   const found = detectSpecPath(ev, { fs, root });
+  if (found && found.ambiguous) return { spec_ambiguous: found.ambiguous, spec_candidates: found.candidates, spec_probe: { ...probe(ev, root, { fs }), candidates: found.ambiguous } };   // 有好幾個進行中的變更：不猜，把候選交給地圖等線索
   const spec = found ? readSpecTasks(found.path, { fs }) : null;
   if (spec) return { spec_tasks: spec, spec_path: found.path, spec_why: found.why };
   // 說話時沒找到任務檔：附上診斷（資料夾名稱與數量），/stats 才看得出為什麼沒抓到

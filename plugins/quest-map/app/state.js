@@ -92,6 +92,7 @@ function createSession() {
     userSaid: '', aiSays: tr('says.idle'),
     levels: [], solo: 'todo', prompted: false, waitingFor: null, waitId: null, waitPrev: null,
     project: '', seq: 0, taskSeq: 0, toast: null, labels: new Map(), prog: new Map(),
+    specAmbiguous: 0,   // Spectra 有幾個進行中的變更、還沒對上是哪一個
     pendingSaid: null,   // 計畫進行中、還沒被認領的使用者的話
     promptSeq: 0,   // 使用者說過幾句話（判斷「你來做」的項目有沒有等到使用者回報）
     waitSince: null,   // 從什麼時候開始在等使用者（毫秒時間）
@@ -388,6 +389,7 @@ function createSession() {
   function handle(e) {
     if (e.cwd && !S.project) S.project = path.basename(e.cwd);
     const tool = e.tool_name, input = e.tool_input || {};
+    if (e.spec_ambiguous !== undefined) S.specAmbiguous = S.bound ? 0 : Number(e.spec_ambiguous) || 0;   // 有好幾個進行中的變更、還不確定是哪一個
     const isTodoTool = tool === 'TodoWrite' || tool === 'TaskCreate' || tool === 'TaskUpdate';
     if ((S.specBound || S.bound === 'quest') && isTodoTool) return false;   // 這個對話以規格任務檔（或 quest_plan）為準
     const spec = e.spec_tasks && S.prompted && e.hook_event_name !== 'UserPromptSubmit' && e.hook_event_name !== 'Notification' ? onSpecTasks(e.spec_tasks) : false;
@@ -440,7 +442,7 @@ function createSession() {
   function build() {
     const levels = S.levels.length ? S.levels.map(({ keepReason, ...l }) => disp(l)) : [disp({
       id: 'solo' + S.round, title: S.prompted ? tr('level.solo') : tr('level.start'), status: S.solo,
-      plain: S.prompted ? tr('solo.plain') : tr('solo.plain0'),
+      plain: S.prompted ? (S.specAmbiguous ? tr('solo.ambiguous', { n: S.specAmbiguous }) : tr('solo.plain')) : tr('solo.plain0'),
       tech: S.chat ? tr('tech.chat0') : tr('tech.code0'),
       ...(S.solo === 'wait' ? { reason: tr('reason.wait') } : {})
     })];
@@ -490,7 +492,7 @@ function createSession() {
     const todos = units.map((u, i) => ({ content: u.title, status: u.done ? 'completed' : i === first ? 'in_progress' : 'pending' }));
     if (S.bound === 'plan') resetFromPlan();
     const wasBound = S.specBound;
-    S.specBound = true; S.bound = 'spec';
+    S.specBound = true; S.bound = 'spec'; S.specAmbiguous = 0;
     onTodos(todos, true);
     if (d.name && !wasBound) S.world = short(d.name, 12);   // 第一次綁定：世界名稱用任務資料夾名稱
     if (!flat) units.forEach(u => {
